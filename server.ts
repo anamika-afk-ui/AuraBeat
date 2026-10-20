@@ -77,9 +77,14 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+const PUBLIC_CATALOG_FILE = path.resolve(__dirname, 'public', 'cloudCatalog.json');
+
 function getCloudCatalog(): any[] {
   try {
-    if (fs.existsSync(CATALOG_FILE)) {
+    if (fs.existsSync(PUBLIC_CATALOG_FILE)) {
+      const content = fs.readFileSync(PUBLIC_CATALOG_FILE, 'utf-8');
+      return JSON.parse(content);
+    } else if (fs.existsSync(CATALOG_FILE)) {
       const content = fs.readFileSync(CATALOG_FILE, 'utf-8');
       return JSON.parse(content);
     }
@@ -91,7 +96,9 @@ function getCloudCatalog(): any[] {
 
 function saveCloudCatalog(catalog: any[]) {
   try {
-    fs.writeFileSync(CATALOG_FILE, JSON.stringify(catalog, null, 2), 'utf-8');
+    const data = JSON.stringify(catalog, null, 2);
+    fs.writeFileSync(CATALOG_FILE, data, 'utf-8');
+    fs.writeFileSync(PUBLIC_CATALOG_FILE, data, 'utf-8');
   } catch (err) {
     console.error('Error saving cloud catalog:', err);
   }

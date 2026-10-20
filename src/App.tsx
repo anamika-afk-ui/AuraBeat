@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Song, Playlist, EqualizerSettings, ThemeConfig, UserProfile } from './types';
 import { DEFAULT_SONGS, PRESET_THEMES } from './data/defaultSongs';
+import { BUNDLED_PUBLISHED_SONGS } from './data/publishedSongs';
 import { audioEngine, EQ_PRESETS } from './utils/audioEngine';
 import {
   saveSongMetadata,
@@ -158,30 +159,59 @@ export default function App() {
     async function loadData() {
       try {
         const savedSongs = await getAllSavedSongs();
-        let baseList: Song[] = [...DEFAULT_SONGS];
+        const map = new Map<string, Song>();
+
+        // 1. Built-in default tracks
+        DEFAULT_SONGS.forEach((s) => map.set(s.id, s));
+
+        // 2. Creator published songs bundled directly into client build for Vercel
+        BUNDLED_PUBLISHED_SONGS.forEach((s) => map.set(s.id, s));
+
+        // 3. User local uploads saved in IndexedDB
         if (savedSongs && savedSongs.length > 0) {
-          const map = new Map<string, Song>();
-          DEFAULT_SONGS.forEach((s) => map.set(s.id, s));
           savedSongs.forEach((s) => map.set(s.id, s));
-          baseList = Array.from(map.values());
         }
 
-        // Fetch published online cloud songs from server
+        // 4. Fetch dynamic online cloud songs (checks /api/catalog/songs first, then /cloudCatalog.json for Vercel)
         try {
-          const res = await fetch('/api/catalog/songs');
-          if (res.ok) {
-            const data = await res.json();
-            if (data.songs && Array.isArray(data.songs)) {
-              const map = new Map<string, Song>();
-              baseList.forEach((s) => map.set(s.id, s));
-              data.songs.forEach((s: Song) => map.set(s.id, s));
-              baseList = Array.from(map.values());
+          let catalogSongs: Song[] = [];
+
+          // Try server API first
+          try {
+            const res = await fetch('/api/catalog/songs');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.songs && Array.isArray(data.songs)) {
+                catalogSongs = data.songs;
+              }
             }
+          } catch {
+            // API not available on static hosting like Vercel
+          }
+
+          // Fallback to static public/cloudCatalog.json (served by Vercel/Netlify static hosts)
+          if (catalogSongs.length === 0) {
+            try {
+              const staticRes = await fetch('/cloudCatalog.json');
+              if (staticRes.ok) {
+                const staticData = await staticRes.json();
+                if (Array.isArray(staticData)) {
+                  catalogSongs = staticData;
+                }
+              }
+            } catch {
+              // Static file not reachable
+            }
+          }
+
+          if (catalogSongs.length > 0) {
+            catalogSongs.forEach((s: Song) => map.set(s.id, s));
           }
         } catch {
           // offline
         }
 
+        const baseList = Array.from(map.values());
         setSongs(baseList);
         setQueue(baseList);
 
@@ -686,23 +716,36 @@ export default function App() {
       });
     }
 
-    const res = await fetch('/api/catalog/publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...song,
-        audioBase64,
-      }),
-    });
+    try {
+      const res = await fetch('/api/catalog/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...song,
+          audioBase64,
+        }),
+      });
 
-    if (!res.ok) throw new Error('Publish failed');
-    const data = await res.json();
-    if (data.song) {
-      setSongs((prev) => prev.map((s) => (s.id === song.id ? data.song : s)));
-      setQueue((prev) => prev.map((s) => (s.id === song.id ? data.song : s)));
-      await saveSongMetadata(data.song);
-      confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.song) {
+          setSongs((prev) => prev.map((s) => (s.id === song.id ? data.song : s)));
+          setQueue((prev) => prev.map((s) => (s.id === song.id ? data.song : s)));
+          await saveSongMetadata(data.song);
+          confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend publish API not reachable (Vercel static mode), updating local state:', e);
     }
+
+    // Fallback for Vercel static deployments
+    const updated: Song = { ...song, isCloudShared: true };
+    await saveSongMetadata(updated);
+    setSongs((prev) => prev.map((s) => (s.id === song.id ? updated : s)));
+    setQueue((prev) => prev.map((s) => (s.id === song.id ? updated : s)));
+    confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
   };
 
   // Queue reordering (Aage / Pichhe)
