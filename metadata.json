@@ -1,0 +1,6 @@
+{
+  "name": "AuraBeat Super Music Player",
+  "description": "Next-gen music player with 300% audio boost, 10-band equalizer, offline caching, real-time dual-device sync, auto-synced lyrics, and custom themes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

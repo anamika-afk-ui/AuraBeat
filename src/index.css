@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@keyframes sparkFloat {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: translate(-10px, -6px) scale(0.85);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-22px, 2px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkFloatAlt {
+  0% {
+    transform: translate(0, 0) scale(0.9);
+    opacity: 0.95;
+  }
+  50% {
+    transform: translate(-14px, 6px) scale(1.1);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(-28px, -4px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkFloatSlow {
+  0% {
+    transform: translate(0, 0) scale(1.1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-8px, -8px) scale(0.7);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-18px, -12px) scale(0.1);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkFlicker {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes sparkShimmerSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes auraPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px #06b6d4, 0 0 20px #10b981, 0 0 30px rgba(6, 182, 212, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 16px #38bdf8, 0 0 28px #34d399, 0 0 45px rgba(52, 211, 153, 0.6);
+  }
+}
+
+.animate-spark-float-1 {
+  animation: sparkFloat 1.2s infinite ease-out;
+}
+
+.animate-spark-float-2 {
+  animation: sparkFloatAlt 1.5s infinite ease-out 0.25s;
+}
+
+.animate-spark-float-3 {
+  animation: sparkFloatSlow 1.8s infinite ease-out 0.5s;
+}
+
+.animate-spark-float-4 {
+  animation: sparkFloat 1.4s infinite ease-out 0.75s;
+}
+
+.animate-spark-flicker {
+  animation: sparkFlicker 1.8s infinite ease-in-out;
+}
+
+.animate-shimmer-sweep {
+  animation: sparkShimmerSweep 2.4s infinite linear;
+}
+
+.spark-dot-glow {
+  animation: auraPulse 2s infinite ease-in-out;
+}
