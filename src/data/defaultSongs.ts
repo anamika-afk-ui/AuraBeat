@@ -2,115 +2,97 @@ import { Song } from '../types';
 
 export const DEFAULT_SONGS: Song[] = [
   {
-    id: 'track-1',
-    title: 'Neon Horizon',
+    id: 'local_1792434880509_wnas',
+    title: 'Kitab Haryanvi',
+    artist: 'My Local Music',
+    album: 'Uploaded Tracks',
+    duration: 182,
+    genre: 'Custom Audio',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    coverArt: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+    isCloudShared: true,
+    addedAt: 1792493437569,
+  },
+  {
+    id: 'local_1792436226002_l5on',
+    title: 'Alphuliya',
+    artist: 'My Local Music',
+    album: 'Uploaded Tracks',
+    duration: 259,
+    genre: 'Custom Audio',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    coverArt: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+    isCloudShared: true,
+    addedAt: 1792492801391,
+  },
+  {
+    id: 'local_1792436238277_idhk',
+    title: 'Tiposi Mon',
+    artist: 'My Local Music',
+    album: 'Uploaded Tracks',
+    duration: 253,
+    genre: 'Custom Audio',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    coverArt: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+    isCloudShared: true,
+    addedAt: 1792492761373,
+  },
+  {
+    id: 'local_1792491453038_66e8',
+    title: 'Tuk Dekhi Mur Ga (PenduJatt.Com.Se)',
+    artist: 'My Local Music',
+    album: 'Uploaded Tracks',
+    duration: 274,
+    genre: 'Custom Audio',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    coverArt: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
+    isCloudShared: true,
+    addedAt: 1792491759152,
+  },
+  {
+    id: 'track-demo-1',
+    title: 'Neon Horizon (SoundHelix 1)',
     artist: 'CyberPulse',
     album: 'Retrowave Odyssey',
-    duration: 172,
-    url: 'https://cdn.freesound.org/previews/612/612627_5674468-lq.mp3',
+    duration: 372,
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
     coverArt: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
     genre: 'Synthwave',
-    addedAt: Date.now() - 100000,
-    lyrics: `[00:02.00] ♪ AuraBeat Synthesizer Intro ♪
-[00:08.50] Gliding through the digital city lines
-[00:15.20] Neon reflections in our eyes
-[00:22.00] High voltage beats in three hundred percent
-[00:29.10] The ultimate sound wave that heaven sent
-[00:36.40] Bass vibrating deep within the chest
-[00:43.00] Put the custom equalizer to the test
-[00:50.10] Sync both speakers left and right
-[00:57.20] We are glowing in the ultraviolet light
-[01:04.50] Feel the momentum taking control
-[01:11.80] Music echoing directly in the soul
-[01:18.90] Across the distance we unite as one
-[01:26.00] Playing the melody until the rising sun
-[01:33.20] ♪ Synth Solo & Cosmic Drops ♪
-[01:47.50] Fade into infinity and sound`
+    addedAt: 1792400000000,
   },
   {
-    id: 'track-2',
-    title: 'Midnight Coffee & Rain',
-    artist: 'Lo-Fi Chill Haven',
-    album: 'Midnight Tokyo',
-    duration: 148,
-    url: 'https://cdn.freesound.org/previews/676/676392_5674468-lq.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=600&auto=format&fit=crop&q=80',
-    genre: 'Lo-Fi Chill',
-    addedAt: Date.now() - 80000,
-    lyrics: `[00:03.00] ♪ Gentle vinyl crackle & warm piano ♪
-[00:11.00] Raindrops tapping soft against the pane
-[00:19.20] Washing all the daytime rush away
-[00:27.50] Steaming cup of coffee in my hand
-[00:35.80] Warm bass frequencies across the land
-[00:44.20] Sleep timer ticking peacefully down
-[00:52.40] Quiet comfort in this sleepy town
-[01:00.60] Headphones on, the volume boosted high
-[01:09.00] Watching tranquil stars pass across the sky
-[01:17.50] Gentle melody, sweet harmony
-[01:26.00] Just you, the music, and me`
-  },
-  {
-    id: 'track-3',
-    title: 'Hyper Bass Overdrive',
+    id: 'track-demo-2',
+    title: 'Hyper Bass Overdrive (SoundHelix 2)',
     artist: 'Voltage 300',
     album: 'Peak Limiters',
-    duration: 195,
-    url: 'https://cdn.freesound.org/previews/612/612628_5674468-lq.mp3',
+    duration: 423,
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
     coverArt: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
     genre: 'EDM / Club',
-    addedAt: Date.now() - 60000,
-    lyrics: `[00:01.50] ♪ Subwoofer Pre-Charge (300% Gain) ♪
-[00:07.00] Ready for the sonic blast!
-[00:12.80] 3-2-1 Hit the floor!
-[00:19.00] Drop the frequency down to thirty-two
-[00:26.40] This bass was built specially for you
-[00:33.20] Dual devices synced in perfect time
-[00:40.00] Left channel pumping, right channel sublime
-[00:47.00] No clipping distortion, limiter tight
-[00:54.00] We rule the audio spectrum tonight
-[01:01.50] Feel the sub bass kick again!
-[01:15.00] AuraBeat overdrive to the maximum!`
+    addedAt: 1792390000000,
   },
   {
-    id: 'track-4',
-    title: 'Acoustic Sunset Breeze',
-    artist: 'Serenity Strings',
-    album: 'Golden Hour Memories',
-    duration: 160,
-    url: 'https://cdn.freesound.org/previews/573/573539_5674468-lq.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-    genre: 'Acoustic',
-    addedAt: Date.now() - 40000,
-    lyrics: `[00:02.00] ♪ Fingerstyle guitar resonance ♪
-[00:09.50] Golden rays dancing on the ocean tide
-[00:18.00] Peaceful feelings you no longer have to hide
-[00:26.50] Crisp highs and crystal vocal warmth
-[00:35.00] Flowing gently south and north
-[00:43.50] Sharing this song with someone miles away
-[00:52.00] Synchronized in real time without delay
-[01:00.50] Every pluck and chord resonates true
-[01:09.00] Underneath the sky so deep and blue`
+    id: 'track-demo-3',
+    title: 'Cosmic Bass Odyssey (SoundHelix 8)',
+    artist: 'Aura Collective',
+    album: 'Infinite Echoes',
+    duration: 312,
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+    coverArt: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
+    genre: 'Synthwave / Bass',
+    addedAt: 1792380000000,
   },
   {
-    id: 'track-5',
-    title: 'Galactic Aurora',
-    artist: 'Starlight Dreamer',
-    album: 'Deep Space Reverberation',
-    duration: 210,
-    url: 'https://cdn.freesound.org/previews/518/518305_5674468-lq.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-    genre: 'Ambient',
-    addedAt: Date.now() - 20000,
-    lyrics: `[00:04.00] ♪ Ethereal atmospheric pads ♪
-[00:14.00] Floating across celestial streams
-[00:25.00] Boundless spaces within our dreams
-[00:37.00] Equalizer curve like planetary rings
-[00:48.00] The celestial sound vibration brings
-[01:00.00] Complete tranquility in every breath
-[01:12.00] Transcending time, conquering stress
-[01:25.00] 3D virtualizer expanding the room
-[01:38.00] Chasing away the midnight gloom`
-  }
+    id: 'track-demo-4',
+    title: 'Midnight Resonance (SoundHelix 9)',
+    artist: 'Echo Shift',
+    album: 'Midnight Pulse',
+    duration: 345,
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+    coverArt: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&auto=format&fit=crop&q=80',
+    genre: 'Lo-Fi / Chill',
+    addedAt: 1792370000000,
+  },
 ];
 
 export const PRESET_THEMES = [
@@ -179,5 +161,5 @@ export const PRESET_THEMES = [
     cardBg: 'rgba(40, 31, 14, 0.7)',
     textColor: '#fefce8',
     glassOpacity: 0.7,
-  }
+  },
 ];

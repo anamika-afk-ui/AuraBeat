@@ -18,6 +18,29 @@ const app = express();
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
+// Global CORS & Range Headers for Audio Streaming and Catalog Access
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', '*');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Explicitly serve /uploads with byte-range seeking and CORS for all audio players
+app.use(
+  '/uploads',
+  express.static(path.resolve(__dirname, 'public', 'uploads'), {
+    setHeaders: (res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Accept-Ranges', 'bytes');
+    },
+  })
+);
+
 // Initialize Gemini client if key is provided
 let aiClient: GoogleGenAI | null = null;
 if (process.env.GEMINI_API_KEY) {

@@ -43,8 +43,12 @@ class AudioEngine {
     }
 
     try {
-      this.audioCtx = new AudioContextClass();
-      this.sourceNode = this.audioCtx.createMediaElementSource(audioEl);
+      if (!this.audioCtx) {
+        this.audioCtx = new AudioContextClass();
+      }
+      if (!this.sourceNode) {
+        this.sourceNode = this.audioCtx.createMediaElementSource(audioEl);
+      }
 
       // 1. Create 10-band EQ filters
       this.eqFilters = EQ_FREQUENCIES.map((freq) => {

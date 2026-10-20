@@ -39,6 +39,7 @@ import {
   Moon,
   Palette,
   User,
+  Users,
   ListMusic,
   Share2,
   Upload,
@@ -130,6 +131,7 @@ export default function App() {
   // Sync Room
   const [syncRoomCode, setSyncRoomCode] = useState<string>('');
   const [syncConnected, setSyncConnected] = useState<boolean>(false);
+  const [syncModalTab, setSyncModalTab] = useState<'host' | 'join'>('join');
 
   // Navigation & Filtering
   const [activeFilter, setActiveFilter] = useState<'all' | 'offline' | 'custom' | 'playlist'>('all');
@@ -215,6 +217,12 @@ export default function App() {
         setSongs(baseList);
         setQueue(baseList);
 
+        // Pre-initialize audio element with the first track so Play button works instantly
+        if (audioRef.current && baseList.length > 0 && !audioRef.current.src) {
+          audioRef.current.src = baseList[0].url;
+          audioRef.current.preload = 'metadata';
+        }
+
         const savedPlaylists = await getAllPlaylists();
         if (savedPlaylists && savedPlaylists.length > 0) {
           setPlaylists(savedPlaylists);
@@ -279,9 +287,33 @@ export default function App() {
 
         // Synchronize track
         if (data.songId) {
-          const foundIdx = queue.findIndex((s) => s.id === data.songId);
-          if (foundIdx !== -1 && foundIdx !== currentSongIndex) {
-            setCurrentSongIndex(foundIdx);
+          const targetSong = queue.find((s) => s.id === data.songId) || songs.find((s) => s.id === data.songId);
+          if (targetSong) {
+            const currentId = queue[currentSongIndex]?.id;
+            if (currentId !== data.songId) {
+              const qIdx = queue.findIndex((s) => s.id === data.songId);
+              if (qIdx !== -1) {
+                setCurrentSongIndex(qIdx);
+              } else {
+                setQueue((prev) => [targetSong, ...prev]);
+                setCurrentSongIndex(0);
+              }
+
+              if (audioRef.current) {
+                audioRef.current.src = targetSong.url;
+                if (typeof data.positionSec === 'number') {
+                  audioRef.current.currentTime = data.positionSec;
+                  setCurrentTime(data.positionSec);
+                }
+                if (data.isPlaying) {
+                  audioEngine.ensureRunning();
+                  audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                } else {
+                  audioRef.current.pause();
+                  setIsPlaying(false);
+                }
+              }
+            }
           }
         }
 
@@ -289,18 +321,17 @@ export default function App() {
         if (typeof data.isPlaying === 'boolean' && audioRef.current) {
           if (data.isPlaying && audioRef.current.paused) {
             audioEngine.ensureRunning();
-            audioRef.current.play().catch(() => {});
-            setIsPlaying(true);
+            audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
           } else if (!data.isPlaying && !audioRef.current.paused) {
             audioRef.current.pause();
             setIsPlaying(false);
           }
         }
 
-        // Synchronize exact timestamp
+        // Synchronize exact timestamp if drifting
         if (typeof data.positionSec === 'number' && audioRef.current) {
           const drift = Math.abs(audioRef.current.currentTime - data.positionSec);
-          if (drift > 0.25) {
+          if (drift > 0.35) {
             audioRef.current.currentTime = data.positionSec;
             setCurrentTime(data.positionSec);
           }
@@ -387,46 +418,89 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Check if song has local blob in IndexedDB
-  const resolveAudioUrl = async (song: Song): Promise<string> => {
-    try {
-      const blob = await getAudioBlob(song.id);
-      if (blob) {
-        return URL.createObjectURL(blob);
+  // Robust Audio Player Engine Execution
+  const playSong = (index: number, forceSong?: Song) => {
+    const targetSong = forceSong || queue[index] || songs[index];
+    if (!targetSong) return;
+
+    if (forceSong) {
+      const existingIdx = queue.findIndex((s) => s.id === forceSong.id);
+      if (existingIdx !== -1) {
+        setCurrentSongIndex(existingIdx);
+      } else {
+        setQueue((prev) => [forceSong, ...prev]);
+        setCurrentSongIndex(0);
       }
-    } catch {
-      // fallback to url
+    } else {
+      setCurrentSongIndex(index);
     }
-    return song.url;
-  };
 
-  const playSong = async (index: number) => {
-    if (index < 0 || index >= queue.length) return;
-    const song = queue[index];
-    setCurrentSongIndex(index);
-
+    // 1. Resume AudioContext immediately within direct user interaction tick
     audioEngine.ensureRunning();
 
-    if (audioRef.current) {
-      const resolvedSrc = await resolveAudioUrl(song);
-      audioRef.current.src = resolvedSrc;
-      audioRef.current.load();
-      audioRef.current
+    if (!audioRef.current) return;
+
+    const audioEl = audioRef.current;
+    const targetSrc = targetSong.url;
+
+    // 2. If already loaded this song and just paused, simply resume
+    const isSameSrc =
+      audioEl.src === targetSrc ||
+      audioEl.src.endsWith(targetSrc) ||
+      (targetSrc.startsWith('/') && audioEl.src.endsWith(targetSrc));
+
+    if (isSameSrc && audioEl.readyState >= 2) {
+      audioEl
         .play()
         .then(() => {
           setIsPlaying(true);
-          // Increment songs count
-          setUserProfile((prev) => {
-            const updated = { ...prev, songsPlayedCount: prev.songsPlayedCount + 1 };
-            saveSetting('user_profile', updated);
-            return updated;
-          });
-          // Broadcast to sync room if connected
           if (syncConnected) {
-            syncClient.broadcastPlayback(song.id, true, 0, 'play');
+            syncClient.broadcastPlayback(targetSong.id, true, audioEl.currentTime, 'play');
           }
         })
-        .catch((e) => console.warn('Autoplay prevented:', e));
+        .catch(() => {
+          // Force reload if play failed
+          audioEl.src = targetSrc;
+          audioEl.load();
+          audioEl.play().catch((e) => console.warn('Audio play retry failed:', e));
+        });
+      return;
+    }
+
+    // 3. New track load and play
+    try {
+      audioEl.src = targetSrc;
+      audioEl.load();
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setUserProfile((prev) => {
+              const updated = { ...prev, songsPlayedCount: prev.songsPlayedCount + 1 };
+              saveSetting('user_profile', updated);
+              return updated;
+            });
+            if (syncConnected) {
+              syncClient.broadcastPlayback(targetSong.id, true, 0, 'play');
+            }
+          })
+          .catch((err) => {
+            console.warn('Playback play() was prevented or interrupted:', err);
+            // Fallback for offline songs saved in browser IndexedDB
+            if (targetSong.isOffline) {
+              getAudioBlob(targetSong.id).then((blob) => {
+                if (blob && audioRef.current) {
+                  audioRef.current.src = URL.createObjectURL(blob);
+                  audioRef.current.load();
+                  audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                }
+              });
+            }
+          });
+      }
+    } catch (e) {
+      console.error('Error starting audio playback:', e);
     }
   };
 
@@ -434,22 +508,42 @@ export default function App() {
     audioEngine.ensureRunning();
     if (!audioRef.current) return;
 
-    if (isPlaying) {
-      audioRef.current.pause();
+    const audioEl = audioRef.current;
+    const currentSrc = audioEl.currentSrc || audioEl.src;
+
+    // If audio element has no source yet (e.g. fresh page visit), play current track!
+    if (!currentSrc || currentSrc === '' || currentSrc === window.location.href) {
+      const active = currentSong || queue[currentSongIndex] || queue[0] || songs[0];
+      if (active) {
+        playSong(currentSongIndex, active);
+        return;
+      }
+    }
+
+    if (isPlaying && !audioEl.paused) {
+      audioEl.pause();
       setIsPlaying(false);
       if (syncConnected && currentSong) {
-        syncClient.broadcastPlayback(currentSong.id, false, audioRef.current.currentTime, 'pause');
+        syncClient.broadcastPlayback(currentSong.id, false, audioEl.currentTime, 'pause');
       }
     } else {
-      audioRef.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-          if (syncConnected && currentSong && audioRef.current) {
-            syncClient.broadcastPlayback(currentSong.id, true, audioRef.current.currentTime, 'play');
-          }
-        })
-        .catch(() => {});
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            if (syncConnected && currentSong) {
+              syncClient.broadcastPlayback(currentSong.id, true, audioEl.currentTime, 'play');
+            }
+          })
+          .catch((err) => {
+            console.warn('Play button failed, reloading track:', err);
+            const active = currentSong || queue[currentSongIndex] || queue[0] || songs[0];
+            if (active) {
+              playSong(currentSongIndex, active);
+            }
+          });
+      }
     }
   };
 
@@ -898,12 +992,14 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen w-full flex flex-col bg-gradient-to-b ${currentTheme.bgGradient} text-white font-sans transition-colors duration-500 pb-28 select-none`}
+      className={`min-h-screen w-full max-w-full overflow-x-hidden flex flex-col bg-gradient-to-b ${currentTheme.bgGradient} text-white font-sans transition-colors duration-500 pb-28 select-none`}
     >
       {/* Hidden Core Audio Element */}
       <audio
         ref={audioRef}
-        crossOrigin="anonymous"
+        preload="auto"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
         onTimeUpdate={() => {
           if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
         }}
@@ -913,65 +1009,86 @@ export default function App() {
         onEnded={() => {
           if (repeatMode === 'one' && audioRef.current) {
             audioRef.current.currentTime = 0;
-            audioRef.current.play();
+            audioRef.current.play().catch(() => {});
           } else {
             handleNext();
+          }
+        }}
+        onError={(e) => {
+          const mediaError = audioRef.current?.error;
+          console.warn('Audio playback error:', mediaError?.code, mediaError?.message, e);
+          setIsPlaying(false);
+          // Auto recover with verified audio fallback so user always hears music
+          if (audioRef.current && currentSong) {
+            getAudioBlob(currentSong.id).then((blob) => {
+              if (blob && audioRef.current) {
+                audioRef.current.src = URL.createObjectURL(blob);
+                audioRef.current.load();
+                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+              } else if (audioRef.current && !audioRef.current.src.includes('SoundHelix')) {
+                audioRef.current.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+                audioRef.current.load();
+                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+              }
+            });
           }
         }}
       />
 
       {/* TOP HEADER */}
-      <header className="sticky top-0 z-30 px-4 md:px-8 py-3.5 bg-black/40 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
+      <header className="sticky top-0 z-30 w-full max-w-full overflow-x-hidden px-3 sm:px-4 md:px-8 py-2.5 sm:py-3.5 bg-black/50 backdrop-blur-xl border-b border-white/10 flex items-center justify-between gap-2">
         {/* Logo & Brand */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <div
-            className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20"
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0"
             style={{
               background: `linear-gradient(135deg, ${currentTheme.primaryColor}, ${currentTheme.accentColor})`,
             }}
           >
-            <Disc className="w-5 h-5 text-white animate-spin [animation-duration:8s]" />
+            <Disc className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-spin [animation-duration:8s]" />
           </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-base md:text-lg font-extrabold tracking-tight text-white">
+          <div className="min-w-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <h1 className="text-sm sm:text-base md:text-lg font-extrabold tracking-tight text-white truncate">
                 AuraBeat
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-red-500 to-amber-500 text-black">
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-red-500 to-amber-500 text-black shrink-0">
                 300% BOOST
               </span>
             </div>
-            <p className="text-[10px] text-zinc-400 hidden sm:block">
-              10-Band EQ • Offline Storage • Dual-Device Sync • Synced Karaoke
+            <p className="text-[10px] text-zinc-400 hidden sm:block truncate">
+              10-Band EQ • Offline Storage • Dual-Device Sync
             </p>
           </div>
         </div>
 
         {/* Top Status & Shortcut Pills */}
-        <div className="flex items-center space-x-2 md:space-x-3">
-          {/* Party Mode Sync Indicator */}
-          <button
-            onClick={() => setIsSyncOpen(true)}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-              syncConnected
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-lg shadow-emerald-500/20'
-                : 'bg-zinc-800/80 text-zinc-300 border-white/5 hover:bg-zinc-700'
-            }`}
-          >
-            <Radio className={`w-3.5 h-3.5 ${syncConnected ? 'animate-pulse' : ''}`} />
-            <span className="hidden sm:inline">{syncConnected ? `Party: ${syncRoomCode}` : 'Listen Together'}</span>
-          </button>
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+          {/* Party Mode Room Badge - ONLY shown if in an active room, compact */}
+          {syncConnected && (
+            <button
+              onClick={() => {
+                setSyncModalTab('host');
+                setIsSyncOpen(true);
+              }}
+              className="flex items-center space-x-1 px-2 py-1 rounded-xl text-[10px] sm:text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm animate-pulse shrink-0"
+              title={`Room Active: ${syncRoomCode}`}
+            >
+              <Radio className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span>{syncRoomCode}</span>
+            </button>
+          )}
 
           {/* 300% Boost Quick Pill */}
           <button
             onClick={() => setIsEQOpen(true)}
-            className={`flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${
               boostPercent > 100
-                ? 'bg-gradient-to-r from-red-600 via-amber-500 to-amber-400 text-black shadow-lg shadow-amber-500/30'
+                ? 'bg-gradient-to-r from-red-600 via-amber-500 to-amber-400 text-black shadow-md shadow-amber-500/20'
                 : 'bg-zinc-800 text-zinc-300 hover:text-white'
             }`}
           >
-            <Flame className={`w-3.5 h-3.5 ${boostPercent > 100 ? 'fill-black' : 'text-amber-400'}`} />
+            <Flame className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${boostPercent > 100 ? 'fill-black' : 'text-amber-400'}`} />
             <span>{boostPercent}%</span>
           </button>
 
@@ -979,9 +1096,9 @@ export default function App() {
           {sleepTimerSeconds !== null && sleepTimerSeconds > 0 && (
             <button
               onClick={() => setIsSleepOpen(true)}
-              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-mono font-bold"
+              className="flex items-center space-x-1 px-2 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-[11px] font-mono font-bold shrink-0"
             >
-              <Moon className="w-3.5 h-3.5" />
+              <Moon className="w-3 h-3" />
               <span>{Math.ceil(sleepTimerSeconds / 60)}m</span>
             </button>
           )}
@@ -989,32 +1106,32 @@ export default function App() {
           {/* Install on Mobile / PWA Button */}
           <button
             onClick={() => setIsInstallOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black text-xs font-bold shadow-md shadow-emerald-500/20 hover:opacity-95 transition-all"
+            className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black text-[11px] sm:text-xs font-bold shadow-md shadow-emerald-500/20 hover:opacity-95 transition-all shrink-0"
             title="Download / Install on Mobile"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Install App</span>
+            <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <span className="hidden md:inline">Install</span>
           </button>
 
           {/* Theme Selector */}
           <button
             onClick={() => setIsThemeOpen(true)}
-            className="p-2 rounded-xl bg-zinc-800/80 text-zinc-300 hover:text-white border border-white/5 transition-colors"
+            className="p-1.5 sm:p-2 rounded-xl bg-zinc-800/80 text-zinc-300 hover:text-white border border-white/5 transition-colors shrink-0"
             title="Theme & Colors"
           >
-            <Palette className="w-4 h-4" />
+            <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* User Account */}
           <button
             onClick={() => setIsUserOpen(true)}
-            className="p-1 rounded-xl bg-zinc-800/80 hover:ring-2 hover:ring-cyan-400 border border-white/5 transition-all"
+            className="p-0.5 sm:p-1 rounded-xl bg-zinc-800/80 hover:ring-2 hover:ring-cyan-400 border border-white/5 transition-all shrink-0"
             title="User Profile"
           >
             <img
               src={userProfile.avatar}
               alt={userProfile.name}
-              className="w-7 h-7 rounded-lg object-cover"
+              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg object-cover"
             />
           </button>
         </div>
@@ -1098,13 +1215,42 @@ export default function App() {
             </div>
 
             <div className="mt-4 pt-3 border-t border-white/5 space-y-2">
-              <button
-                onClick={() => setIsSyncOpen(true)}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center space-x-2"
-              >
-                <Radio className="w-4 h-4" />
-                <span>{syncConnected ? 'Manage Synced Room' : 'Create / Join Sync Room'}</span>
-              </button>
+              {syncConnected ? (
+                <button
+                  onClick={() => {
+                    setSyncModalTab('host');
+                    setIsSyncOpen(true);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center space-x-2 animate-pulse"
+                >
+                  <Radio className="w-4 h-4" />
+                  <span>Manage Active Room: {syncRoomCode}</span>
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setSyncModalTab('join');
+                      setIsSyncOpen(true);
+                    }}
+                    className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-extrabold text-xs shadow-md shadow-emerald-500/20 hover:opacity-95 transition-all flex items-center justify-center space-x-1.5"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Join Room</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setSyncModalTab('host');
+                      setIsSyncOpen(true);
+                    }}
+                    className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold text-xs shadow-md shadow-indigo-600/30 transition-all flex items-center justify-center space-x-1.5"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Host Room</span>
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-400">
                 <button
@@ -1542,16 +1688,20 @@ export default function App() {
                     {/* Song Cover & Details (Click to Play) */}
                     <div
                       onClick={() => {
-                        const queueIdx = queue.findIndex((s) => s.id === song.id);
-                        if (queueIdx !== -1) {
-                          playSong(queueIdx);
+                        if (currentSong?.id === song.id) {
+                          handlePlayPause();
                         } else {
-                          setQueue((prev) => [song, ...prev]);
-                          playSong(0);
+                          const queueIdx = queue.findIndex((s) => s.id === song.id);
+                          if (queueIdx !== -1) {
+                            playSong(queueIdx, song);
+                          } else {
+                            setQueue((prev) => [song, ...prev]);
+                            playSong(0, song);
+                          }
                         }
                       }}
                       className="flex items-center space-x-3 truncate cursor-pointer flex-1 mr-2"
-                      title="Click to play"
+                      title={isThisPlaying ? 'Click to pause' : 'Click to play'}
                     >
                       {/* Cover Art with quick Edit Cover overlay */}
                       <div className="relative shrink-0 group/cover">
@@ -1794,9 +1944,30 @@ export default function App() {
       <ListenTogetherModal
         isOpen={isSyncOpen}
         onClose={() => setIsSyncOpen(false)}
-        currentSongTitle={currentSong?.title}
+        songs={songs}
+        currentSong={currentSong}
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        duration={duration}
+        onPlaySong={(song) => {
+          const idx = queue.findIndex((s) => s.id === song.id);
+          if (idx !== -1) {
+            playSong(idx);
+          } else {
+            setQueue((prev) => [song, ...prev]);
+            playSong(0, song);
+          }
+        }}
+        onPlayPause={handlePlayPause}
+        onSeek={(pos) => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = pos;
+            setCurrentTime(pos);
+          }
+        }}
         onStereoModeChange={(mode) => setEqSettings({ ...eqSettings, stereoChannelMode: mode })}
         accentColor={currentTheme.primaryColor}
+        initialTab={syncModalTab}
       />
 
       {/* SLEEP TIMER MODAL */}

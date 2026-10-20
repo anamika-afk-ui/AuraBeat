@@ -65,13 +65,17 @@ export interface SyncMember {
   id: string;
   name: string;
   isHost: boolean;
+  hasControl?: boolean; // DJ / playback control permission granted by host
   stereoChannel: 'both' | 'left' | 'right';
+  joinedAt?: number;
 }
 
 export interface SyncRoomState {
   code: string;
   connected: boolean;
   isHost: boolean;
+  hasControl: boolean;
+  hostId: string;
   currentSongId: string | null;
   isPlaying: boolean;
   positionSec: number;

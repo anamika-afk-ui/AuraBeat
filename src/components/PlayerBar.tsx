@@ -273,10 +273,26 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
             <FileText className="w-4 h-4" />
           </button>
 
+          {/* Dual Device / Party Sync */}
+          <button
+            onClick={onOpenSync}
+            className={`p-2 rounded-xl transition-all relative ${
+              syncConnected
+                ? 'text-emerald-400 bg-emerald-500/20 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-500/40'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+            title="Listen Together & Dual Device Sync"
+          >
+            <Radio className={`w-4 h-4 ${syncConnected ? 'animate-pulse' : ''}`} />
+            {syncConnected && (
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute top-1.5 right-1.5" />
+            )}
+          </button>
+
           {/* Sleep Timer */}
           <button
             onClick={onOpenSleepTimer}
-            className={`p-2 rounded-xl transition-colors relative ${
+            className={`hidden sm:block p-2 rounded-xl transition-colors relative ${
               sleepTimerSeconds !== null && sleepTimerSeconds > 0
                 ? 'text-indigo-400 bg-indigo-500/20'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -289,26 +305,10 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
             )}
           </button>
 
-          {/* Dual Device / Party Sync */}
-          <button
-            onClick={onOpenSync}
-            className={`p-2 rounded-xl transition-colors relative ${
-              syncConnected
-                ? 'text-emerald-400 bg-emerald-500/20'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-            title="Listen Together & Dual Device Sync"
-          >
-            <Radio className="w-4 h-4" />
-            {syncConnected && (
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute top-1.5 right-1.5" />
-            )}
-          </button>
-
           {/* Social Share */}
           <button
             onClick={onOpenShare}
-            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="hidden sm:block p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
             title="Share Song"
           >
             <Share2 className="w-4 h-4" />
