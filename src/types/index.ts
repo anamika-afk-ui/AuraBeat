@@ -88,9 +88,11 @@ export interface SyncRoomState {
 export interface UserProfile {
   id: string;
   name: string;
+  email?: string;
   avatar: string;
   totalMinutesListened: number;
   songsPlayedCount: number;
   favoriteGenre: string;
   isLoggedIn: boolean;
+  joinedAt?: number;
 }

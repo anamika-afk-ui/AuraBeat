@@ -28,6 +28,7 @@ import { PlaylistModal } from './components/PlaylistModal';
 import { UserAccountModal } from './components/UserAccountModal';
 import { InstallModal } from './components/InstallModal';
 import { EditSongModal } from './components/EditSongModal';
+import { DeviceAudioPermissionModal } from './components/DeviceAudioPermissionModal';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import confetti from 'canvas-confetti';
 import {
@@ -56,6 +57,7 @@ import {
   Check,
   Disc,
   FolderDown,
+  FolderOpen,
   Volume2,
   Edit2,
   Globe,
@@ -149,6 +151,8 @@ export default function App() {
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
   const [isUserOpen, setIsUserOpen] = useState(false);
   const [isInstallOpen, setIsInstallOpen] = useState(false);
+  const [isDeviceAudioModalOpen, setIsDeviceAudioModalOpen] = useState(false);
+  const [isFirstTimeAudioPrompt, setIsFirstTimeAudioPrompt] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'artist' | 'duration'>('date');
   const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'artists' | 'playlists' | 'cloud' | 'offline'>('all');
@@ -169,9 +173,17 @@ export default function App() {
         // 2. Creator published songs bundled directly into client build for Vercel
         BUNDLED_PUBLISHED_SONGS.forEach((s) => map.set(s.id, s));
 
-        // 3. User local uploads saved in IndexedDB
+        // 3. User local uploads saved in IndexedDB (re-create active blob URLs)
         if (savedSongs && savedSongs.length > 0) {
-          savedSongs.forEach((s) => map.set(s.id, s));
+          for (const s of savedSongs) {
+            try {
+              const blob = await getAudioBlob(s.id);
+              if (blob) {
+                s.url = URL.createObjectURL(blob);
+              }
+            } catch {}
+            map.set(s.id, s);
+          }
         }
 
         // 4. Fetch dynamic online cloud songs (checks /api/catalog/songs first, then /cloudCatalog.json for Vercel)
@@ -251,11 +263,41 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // First-time visit: Prompt for device audio access so all songs load automatically
+    const hasPrompted = localStorage.getItem('aurabeat_audio_permission_asked');
+    let promptTimer: NodeJS.Timeout | null = null;
+    if (!hasPrompted) {
+      promptTimer = setTimeout(() => {
+        setIsFirstTimeAudioPrompt(true);
+        setIsDeviceAudioModalOpen(true);
+      }, 700);
+    }
+
     return () => {
+      if (promptTimer) clearTimeout(promptTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Handle batch of device songs scanned & imported
+  const handleDeviceSongsImported = (importedSongs: Song[]) => {
+    setSongs((prev) => {
+      const existingIds = new Set(prev.map((s) => s.id));
+      const newUnique = importedSongs.filter((s) => !existingIds.has(s.id));
+      return [...newUnique, ...prev];
+    });
+    setQueue((prev) => {
+      const existingIds = new Set(prev.map((s) => s.id));
+      const newUnique = importedSongs.filter((s) => !existingIds.has(s.id));
+      return [...newUnique, ...prev];
+    });
+    // Set to play the first imported song if available
+    if (importedSongs.length > 0 && audioRef.current && !isPlaying) {
+      audioRef.current.src = importedSongs[0].url;
+      audioRef.current.preload = 'metadata';
+    }
+  };
 
   // Initialize Audio Engine once audio element mounts
   useEffect(() => {
@@ -441,72 +483,89 @@ export default function App() {
     if (!audioRef.current) return;
 
     const audioEl = audioRef.current;
-    const targetSrc = targetSong.url;
 
-    // 2. If already loaded this song and just paused, simply resume
-    const isSameSrc =
-      audioEl.src === targetSrc ||
-      audioEl.src.endsWith(targetSrc) ||
-      (targetSrc.startsWith('/') && audioEl.src.endsWith(targetSrc));
+    const startPlayback = (effectiveSrc: string) => {
+      // 2. If already loaded this song and just paused, simply resume
+      const isSameSrc =
+        audioEl.src === effectiveSrc ||
+        audioEl.src.endsWith(effectiveSrc) ||
+        (effectiveSrc.startsWith('/') && audioEl.src.endsWith(effectiveSrc));
 
-    if (isSameSrc && audioEl.readyState >= 2) {
-      audioEl
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-          if (syncConnected) {
-            syncClient.broadcastPlayback(targetSong.id, true, audioEl.currentTime, 'play');
-          }
-        })
-        .catch(() => {
-          // Force reload if play failed
-          audioEl.src = targetSrc;
-          audioEl.load();
-          audioEl.play().catch((e) => console.warn('Audio play retry failed:', e));
-        });
-      return;
-    }
-
-    // 3. New track load and play
-    try {
-      audioEl.src = targetSrc;
-      audioEl.load();
-      const playPromise = audioEl.play();
-      if (playPromise !== undefined) {
-        playPromise
+      if (isSameSrc && audioEl.readyState >= 2) {
+        audioEl
+          .play()
           .then(() => {
             setIsPlaying(true);
-            setUserProfile((prev) => {
-              const updated = { ...prev, songsPlayedCount: prev.songsPlayedCount + 1 };
-              saveSetting('user_profile', updated);
-              return updated;
-            });
             if (syncConnected) {
-              syncClient.broadcastPlayback(targetSong.id, true, 0, 'play');
+              syncClient.broadcastPlayback(targetSong.id, true, audioEl.currentTime, 'play');
             }
           })
-          .catch((err) => {
-            console.warn('Playback play() was prevented or interrupted:', err);
-            // 1. Fallback for offline songs or local uploads saved in browser IndexedDB
-            getAudioBlob(targetSong.id).then((blob) => {
-              if (blob && audioRef.current) {
-                audioRef.current.src = URL.createObjectURL(blob);
-                audioRef.current.load();
-                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-              } else {
-                // 2. Reliable streaming fallback so audio ALWAYS plays on 1 click
-                const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-                if (audioRef.current && audioRef.current.src !== fallbackUrl) {
-                  audioRef.current.src = fallbackUrl;
+          .catch(() => {
+            // Force reload if play failed
+            audioEl.src = effectiveSrc;
+            audioEl.load();
+            audioEl.play().catch((e) => console.warn('Audio play retry failed:', e));
+          });
+        return;
+      }
+
+      // 3. New track load and play
+      try {
+        audioEl.src = effectiveSrc;
+        audioEl.load();
+        const playPromise = audioEl.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIsPlaying(true);
+              setUserProfile((prev) => {
+                const updated = { ...prev, songsPlayedCount: prev.songsPlayedCount + 1 };
+                saveSetting('user_profile', updated);
+                return updated;
+              });
+              if (syncConnected) {
+                syncClient.broadcastPlayback(targetSong.id, true, 0, 'play');
+              }
+            })
+            .catch((err) => {
+              console.warn('Playback play() was prevented or interrupted:', err);
+              // 1. Fallback for offline songs or local uploads saved in browser IndexedDB
+              getAudioBlob(targetSong.id).then((blob) => {
+                if (blob && audioRef.current) {
+                  audioRef.current.src = URL.createObjectURL(blob);
                   audioRef.current.load();
                   audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                } else {
+                  // 2. Reliable streaming fallback so audio ALWAYS plays on 1 click
+                  const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+                  if (audioRef.current && audioRef.current.src !== fallbackUrl) {
+                    audioRef.current.src = fallbackUrl;
+                    audioRef.current.load();
+                    audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                  }
                 }
-              }
+              });
             });
-          });
+        }
+      } catch (e) {
+        console.error('Error starting audio playback:', e);
       }
-    } catch (e) {
-      console.error('Error starting audio playback:', e);
+    };
+
+    if (targetSong.isCustomUpload || targetSong.isOffline) {
+      getAudioBlob(targetSong.id)
+        .then((blob) => {
+          if (blob) {
+            const freshUrl = URL.createObjectURL(blob);
+            targetSong.url = freshUrl;
+            startPlayback(freshUrl);
+          } else {
+            startPlayback(targetSong.url);
+          }
+        })
+        .catch(() => startPlayback(targetSong.url));
+    } else {
+      startPlayback(targetSong.url);
     }
   };
 
@@ -1128,17 +1187,33 @@ export default function App() {
             <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
-          {/* User Account */}
+          {/* User Account / Sign In */}
           <button
             onClick={() => setIsUserOpen(true)}
-            className="p-0.5 sm:p-1 rounded-xl bg-zinc-800/80 hover:ring-2 hover:ring-cyan-400 border border-white/5 transition-all shrink-0"
-            title="User Profile"
+            className={`flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2 py-1 rounded-xl border transition-all shrink-0 cursor-pointer ${
+              userProfile.isLoggedIn
+                ? 'bg-zinc-800/80 hover:ring-2 hover:ring-cyan-400 border-white/10'
+                : 'bg-gradient-to-r from-cyan-500/25 to-blue-500/20 hover:from-cyan-500/35 border-cyan-400/30 text-cyan-300'
+            }`}
+            title={userProfile.isLoggedIn ? `Account (${userProfile.name})` : 'Sign In / Sign Up'}
           >
-            <img
-              src={userProfile.avatar}
-              alt={userProfile.name}
-              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg object-cover"
-            />
+            {userProfile.isLoggedIn ? (
+              <>
+                <img
+                  src={userProfile.avatar}
+                  alt={userProfile.name}
+                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-cover ring-1 ring-cyan-400/40"
+                />
+                <span className="hidden lg:inline text-xs font-semibold text-zinc-200 max-w-[70px] truncate">
+                  {userProfile.name.split(' ')[0]}
+                </span>
+              </>
+            ) : (
+              <>
+                <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                <span className="text-[11px] sm:text-xs font-bold text-cyan-300">Sign In</span>
+              </>
+            )}
           </button>
         </div>
       </header>
@@ -1386,6 +1461,21 @@ export default function App() {
                 className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
               />
             </div>
+
+            {/* Auto-Scan Device Audio Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsFirstTimeAudioPrompt(false);
+                setIsDeviceAudioModalOpen(true);
+              }}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
+              title="Automatic scan all songs from your device storage"
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Auto-Scan</span>
+              <span>Device Audio</span>
+            </button>
 
             <button
               type="button"
@@ -2076,6 +2166,15 @@ export default function App() {
         onPublishToCloud={handlePublishSongToCloud}
         onDeleteSong={handleDeleteSong}
         accentColor={currentTheme.primaryColor}
+      />
+
+      {/* DEVICE AUDIO ACCESS & AUTO-SCAN MODAL */}
+      <DeviceAudioPermissionModal
+        isOpen={isDeviceAudioModalOpen}
+        onClose={() => setIsDeviceAudioModalOpen(false)}
+        onSongsImported={handleDeviceSongsImported}
+        accentColor={currentTheme.primaryColor}
+        isFirstTimePrompt={isFirstTimeAudioPrompt}
       />
     </div>
   );
