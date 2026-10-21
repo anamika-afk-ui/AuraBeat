@@ -29,6 +29,7 @@ import { UserAccountModal } from './components/UserAccountModal';
 import { InstallModal } from './components/InstallModal';
 import { EditSongModal } from './components/EditSongModal';
 import { DeviceAudioPermissionModal } from './components/DeviceAudioPermissionModal';
+import { LyricsOverlay } from './components/LyricsOverlay';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import confetti from 'canvas-confetti';
 import {
@@ -153,6 +154,7 @@ export default function App() {
   const [isInstallOpen, setIsInstallOpen] = useState(false);
   const [isDeviceAudioModalOpen, setIsDeviceAudioModalOpen] = useState(false);
   const [isFirstTimeAudioPrompt, setIsFirstTimeAudioPrompt] = useState(false);
+  const [isLyricsOverlayOpen, setIsLyricsOverlayOpen] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'artist' | 'duration'>('date');
   const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'artists' | 'playlists' | 'cloud' | 'offline'>('all');
@@ -444,16 +446,20 @@ export default function App() {
     return () => clearInterval(timer);
   }, [sleepTimerSeconds, sleepFadeOut, volume]);
 
-  // Track listening minutes
+  // Track listening minutes (optimized: save to IndexedDB every 30s instead of every 1s)
   useEffect(() => {
     if (!isPlaying) return;
+    let ticks = 0;
     const interval = setInterval(() => {
+      ticks++;
       setUserProfile((prev) => {
         const updated = {
           ...prev,
           totalMinutesListened: prev.totalMinutesListened + 1 / 60,
         };
-        saveSetting('user_profile', updated);
+        if (ticks % 30 === 0) {
+          saveSetting('user_profile', updated);
+        }
         return updated;
       });
     }, 1000);
@@ -1066,7 +1072,13 @@ export default function App() {
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={() => {
-          if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+          if (audioRef.current) {
+            const now = audioRef.current.currentTime;
+            // Smoothly update time when delta >= 0.2s or near boundary
+            if (Math.abs(now - currentTime) >= 0.2 || Math.abs(now - duration) < 0.4) {
+              setCurrentTime(now);
+            }
+          }
         }}
         onDurationChange={() => {
           if (audioRef.current) setDuration(audioRef.current.duration || 0);
@@ -1985,7 +1997,7 @@ export default function App() {
         onDownloadToDevice={handleDownloadSongToDevice}
         onEditSong={(song) => setEditingSong(song)}
         onOpenEQ={() => setIsEQOpen(true)}
-        onOpenLyrics={() => setIsFullPlayerOpen(true)}
+        onOpenLyrics={() => setIsLyricsOverlayOpen(true)}
         onOpenSleepTimer={() => setIsSleepOpen(true)}
         onOpenSync={() => setIsSyncOpen(true)}
         onOpenShare={() => setIsShareOpen(true)}
@@ -2036,6 +2048,7 @@ export default function App() {
         onOpenSleepTimer={() => setIsSleepOpen(true)}
         onOpenSync={() => setIsSyncOpen(true)}
         onOpenShare={() => setIsShareOpen(true)}
+        onOpenLyricsOverlay={() => setIsLyricsOverlayOpen(true)}
         onUpdateLyrics={(songId, lrc) => {
           setSongs((prev) => prev.map((s) => (s.id === songId ? { ...s, lyrics: lrc } : s)));
           setQueue((prev) => prev.map((s) => (s.id === songId ? { ...s, lyrics: lrc } : s)));
@@ -2175,6 +2188,30 @@ export default function App() {
         onSongsImported={handleDeviceSongsImported}
         accentColor={currentTheme.primaryColor}
         isFirstTimePrompt={isFirstTimeAudioPrompt}
+      />
+
+      {/* REAL-TIME SYNCHRONIZED LYRICS OVERLAY */}
+      <LyricsOverlay
+        isOpen={isLyricsOverlayOpen}
+        onClose={() => setIsLyricsOverlayOpen(false)}
+        currentSong={currentSong}
+        currentTime={currentTime}
+        duration={duration}
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
+        onNext={handleNext}
+        onPrevious={handlePrevious}
+        onSeek={handleSeek}
+        onToggleFavorite={handleToggleFavorite}
+        onUpdateSongLyrics={(songId, lrc) => {
+          setSongs((prev) =>
+            prev.map((s) => (s.id === songId ? { ...s, lyrics: lrc } : s))
+          );
+          setQueue((prev) =>
+            prev.map((s) => (s.id === songId ? { ...s, lyrics: lrc } : s))
+          );
+        }}
+        accentColor={currentTheme.primaryColor}
       />
     </div>
   );

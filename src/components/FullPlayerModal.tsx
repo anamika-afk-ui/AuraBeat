@@ -27,6 +27,7 @@ import {
   Heart,
   Download,
   Image as ImageIcon,
+  Mic2,
 } from 'lucide-react';
 import { SparkProgressBar } from './SparkProgressBar';
 
@@ -62,6 +63,7 @@ interface FullPlayerModalProps {
   onOpenSleepTimer: () => void;
   onOpenSync: () => void;
   onOpenShare: () => void;
+  onOpenLyricsOverlay?: () => void;
   onUpdateLyrics?: (songId: string, lrc: string) => void;
   accentColor?: string;
   secondaryColor?: string;
@@ -99,6 +101,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   onOpenSleepTimer,
   onOpenSync,
   onOpenShare,
+  onOpenLyricsOverlay,
   onUpdateLyrics,
   accentColor = '#06b6d4',
   secondaryColor = '#ec4899',
@@ -142,12 +145,19 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
             Visualizer
           </button>
           <button
-            onClick={() => setActiveTab('lyrics')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+            onClick={() => {
+              if (onOpenLyricsOverlay) {
+                onOpenLyricsOverlay();
+              } else {
+                setActiveTab('lyrics');
+              }
+            }}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1 ${
               activeTab === 'lyrics' ? 'bg-white/20 text-white shadow' : 'text-zinc-400 hover:text-white'
             }`}
           >
-            Karaoke Lyrics
+            <Mic2 className="w-3 h-3 text-cyan-400" />
+            <span>Lyrics</span>
           </button>
           <button
             onClick={() => setActiveTab('queue')}
@@ -161,6 +171,18 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
 
         {/* Right shortcut buttons */}
         <div className="flex items-center space-x-2">
+          {/* Quick Lyrics Overlay Button */}
+          {onOpenLyricsOverlay && (
+            <button
+              onClick={onOpenLyricsOverlay}
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-indigo-500/20 hover:from-cyan-500/30 text-cyan-300 border border-cyan-500/30 font-bold text-xs shadow-sm shadow-cyan-500/10 transition-all cursor-pointer"
+              title="Open Real-time Synchronized Lyrics"
+            >
+              <Mic2 className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Live Lyrics</span>
+            </button>
+          )}
+
           {/* Favorite Heart Button */}
           {onToggleFavorite && (
             <button

@@ -35,20 +35,18 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     const timeData = new Uint8Array(bufferLength);
 
     const render = () => {
-      animFrameRef.current = requestAnimationFrame(render);
-
       const width = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, width, h);
 
       if (isPlaying && analyser) {
         audioEngine.getVisualizerData(freqData, timeData);
+        animFrameRef.current = requestAnimationFrame(render);
       } else {
-        // Subtle ambient idle wave when paused
-        const time = Date.now() / 1000;
+        // Subtle ambient resting bars when paused, drawn once without looping
         for (let i = 0; i < bufferLength; i++) {
-          freqData[i] = Math.sin(time * 2 + i * 0.2) * 8 + 12;
-          timeData[i] = 128 + Math.sin(time * 3 + i * 0.3) * 6;
+          freqData[i] = 10;
+          timeData[i] = 128;
         }
       }
 

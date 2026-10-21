@@ -105,7 +105,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
       >
         {/* Covered Distance with Glowing Cyan-to-Emerald Trail & Sparks */}
         <div
-          className="absolute top-0 left-0 bottom-0 rounded-full transition-all duration-75 relative overflow-hidden"
+          className="absolute top-0 left-0 bottom-0 rounded-full relative overflow-hidden will-change-[width]"
           style={{
             width: `${progressPercent}%`,
             background: 'linear-gradient(90deg, #06b6d4 0%, #0ea5e9 35%, #10b981 75%, #34d399 100%)',
@@ -138,7 +138,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
 
         {/* Floating Sparks Behind the Scrubber Dot (Moving with dot timing) */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none transition-all duration-75 z-20"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none z-20 will-change-[left]"
           style={{ left: `${progressPercent}%` }}
         >
           {/* The Scrubber Dot */}
