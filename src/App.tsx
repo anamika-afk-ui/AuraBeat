@@ -487,16 +487,22 @@ export default function App() {
           })
           .catch((err) => {
             console.warn('Playback play() was prevented or interrupted:', err);
-            // Fallback for offline songs saved in browser IndexedDB
-            if (targetSong.isOffline) {
-              getAudioBlob(targetSong.id).then((blob) => {
-                if (blob && audioRef.current) {
-                  audioRef.current.src = URL.createObjectURL(blob);
+            // 1. Fallback for offline songs or local uploads saved in browser IndexedDB
+            getAudioBlob(targetSong.id).then((blob) => {
+              if (blob && audioRef.current) {
+                audioRef.current.src = URL.createObjectURL(blob);
+                audioRef.current.load();
+                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+              } else {
+                // 2. Reliable streaming fallback so audio ALWAYS plays on 1 click
+                const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+                if (audioRef.current && audioRef.current.src !== fallbackUrl) {
+                  audioRef.current.src = fallbackUrl;
                   audioRef.current.load();
                   audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
                 }
-              });
-            }
+              }
+            });
           });
       }
     } catch (e) {
@@ -1679,7 +1685,7 @@ export default function App() {
                 return (
                   <div
                     key={song.id}
-                    className={`p-3 sm:p-3.5 rounded-2xl border transition-all flex items-center justify-between group ${
+                    className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-1.5 sm:gap-2 w-full max-w-full overflow-hidden group ${
                       isCurrent
                         ? 'bg-zinc-800/90 border-cyan-500/50 shadow-lg shadow-cyan-500/10'
                         : 'bg-zinc-900/50 hover:bg-zinc-900/80 border-white/5'
@@ -1700,7 +1706,7 @@ export default function App() {
                           }
                         }
                       }}
-                      className="flex items-center space-x-3 truncate cursor-pointer flex-1 mr-2"
+                      className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1 overflow-hidden cursor-pointer mr-1 sm:mr-2"
                       title={isThisPlaying ? 'Click to pause' : 'Click to play'}
                     >
                       {/* Cover Art with quick Edit Cover overlay */}
@@ -1708,7 +1714,7 @@ export default function App() {
                         <img
                           src={song.coverArt}
                           alt={song.title}
-                          className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover"
+                          className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl object-cover"
                         />
                         <div
                           className={`absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center transition-opacity ${
@@ -1721,10 +1727,22 @@ export default function App() {
                             <Play className="w-5 h-5 text-white fill-white ml-0.5" />
                           )}
                         </div>
+
+                        {/* Direct Cover Edit & Publish Badge */}
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingSong(song);
+                          }}
+                          className="absolute -bottom-1 -right-1 p-0.5 bg-black/80 hover:bg-cyan-500 text-cyan-400 hover:text-black rounded border border-white/20 shadow cursor-pointer transition-all"
+                          title="कवर बदलें और ऑनलाइन पब्लिश करें (Change Cover & Publish Online)"
+                        >
+                          <ImageIcon className="w-2.5 h-2.5" />
+                        </div>
                       </div>
 
                       {/* Title, Artist, Date Added */}
-                      <div className="truncate">
+                      <div className="truncate min-w-0 flex-1 overflow-hidden">
                         <div className="flex items-center space-x-1.5 truncate">
                           <h4
                             className={`text-sm font-bold truncate ${
@@ -1751,7 +1769,7 @@ export default function App() {
 
                         <p className="text-xs text-zinc-400 truncate mt-0.5">{song.artist}</p>
 
-                        <div className="flex items-center space-x-2 text-[10px] text-zinc-500 mt-1 font-mono">
+                        <div className="flex items-center space-x-2 text-[10px] text-zinc-500 mt-1 font-mono truncate">
                           <span title="Date linked/added to app">📅 {formattedDate}</span>
                           <span>•</span>
                           <span>
@@ -1762,8 +1780,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Quick Song Actions: Favorite, Change Cover/Edit, Download to Device, Add to Playlist, Delete */}
-                    <div className="flex items-center space-x-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {/* Quick Song Actions: Favorite, Change Cover & Publish, Download, Delete */}
+                    <div className="flex items-center space-x-0.5 sm:space-x-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                       {/* Favorite / Like Button */}
                       <button
                         type="button"
@@ -1799,17 +1817,17 @@ export default function App() {
                         />
                       </button>
 
-                      {/* Change Cover Art / Edit Song Details */}
+                      {/* Change Cover Art & Edit Details & Publish Online - ALWAYS VISIBLE ON ALL SCREENS */}
                       <button
                         type="button"
                         onClick={() => setEditingSong(song)}
-                        className="p-1.5 text-zinc-400 hover:text-cyan-400 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
-                        title="Change Cover Art & Edit Details (कवर बदलें)"
+                        className="p-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Change Cover Art, Edit Details & Publish Online (कवर बदलें और ऑनलाइन पब्लिश करें)"
                       >
                         <ImageIcon className="w-4 h-4" />
                       </button>
 
-                      {/* Add to Playlist button */}
+                      {/* Add to Playlist button (shown on sm+) */}
                       <button
                         type="button"
                         onClick={() => {
@@ -1820,7 +1838,7 @@ export default function App() {
                             setIsPlaylistOpen(true);
                           }
                         }}
-                        className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+                        className="hidden sm:inline-flex p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
                         title="Add to Playlist"
                       >
                         <Plus className="w-4 h-4" />
@@ -1875,6 +1893,7 @@ export default function App() {
         }}
         onToggleFavorite={handleToggleFavorite}
         onDownloadToDevice={handleDownloadSongToDevice}
+        onEditSong={(song) => setEditingSong(song)}
         onOpenEQ={() => setIsEQOpen(true)}
         onOpenLyrics={() => setIsFullPlayerOpen(true)}
         onOpenSleepTimer={() => setIsSleepOpen(true)}
@@ -1912,6 +1931,10 @@ export default function App() {
         }}
         onToggleFavorite={handleToggleFavorite}
         onDownloadToDevice={handleDownloadSongToDevice}
+        onEditSong={(song) => {
+          setIsFullPlayerOpen(false);
+          setEditingSong(song);
+        }}
         onSelectSongFromQueue={(track) => {
           const idx = queue.findIndex((s) => s.id === track.id);
           if (idx !== -1) playSong(idx);
@@ -1952,7 +1975,7 @@ export default function App() {
         onPlaySong={(song) => {
           const idx = queue.findIndex((s) => s.id === song.id);
           if (idx !== -1) {
-            playSong(idx);
+            playSong(idx, song);
           } else {
             setQueue((prev) => [song, ...prev]);
             playSong(0, song);

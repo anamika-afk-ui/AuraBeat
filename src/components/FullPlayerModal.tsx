@@ -26,6 +26,7 @@ import {
   X,
   Heart,
   Download,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { SparkProgressBar } from './SparkProgressBar';
 
@@ -52,6 +53,7 @@ interface FullPlayerModalProps {
   onToggleRepeat: () => void;
   onToggleFavorite?: (songId: string) => void;
   onDownloadToDevice?: (song: Song) => void;
+  onEditSong?: (song: Song) => void;
   onSelectSongFromQueue: (song: Song) => void;
   onMoveQueueItem?: (index: number, direction: 'up' | 'down') => void;
   onRemoveFromQueue?: (index: number) => void;
@@ -88,6 +90,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   onToggleRepeat,
   onToggleFavorite,
   onDownloadToDevice,
+  onEditSong,
   onSelectSongFromQueue,
   onMoveQueueItem,
   onRemoveFromQueue,
@@ -226,6 +229,19 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
                   className="w-full h-full object-cover"
                 />
               </div>
+
+              {/* Change Cover Art & Publish Online Button */}
+              {onEditSong && (
+                <button
+                  type="button"
+                  onClick={() => onEditSong(currentSong)}
+                  className="absolute -bottom-3 left-4 px-3 py-1 rounded-full bg-cyan-500/20 hover:bg-cyan-500 hover:text-black border border-cyan-500/40 text-[10px] font-bold text-cyan-300 flex items-center space-x-1 shadow-lg transition-all cursor-pointer"
+                  title="Change Cover Art & Publish Online (कवर बदलें और ऑनलाइन पब्लिश करें)"
+                >
+                  <ImageIcon className="w-3 h-3" />
+                  <span>कवर बदलें / Publish</span>
+                </button>
+              )}
 
               {/* Vinyl Groove Badge */}
               <div className="absolute -bottom-3 right-4 px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-mono text-cyan-400 flex items-center space-x-1 shadow-lg">

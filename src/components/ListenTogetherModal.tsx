@@ -262,7 +262,7 @@ export const ListenTogetherModal: React.FC<ListenTogetherModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl p-4 sm:p-6 text-white max-h-[92vh] overflow-y-auto flex flex-col">
+      <div className="relative w-full max-w-2xl bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl p-3.5 sm:p-6 text-white max-h-[92vh] overflow-y-auto overflow-x-hidden flex flex-col">
         {/* Top Header */}
         <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10">
           <div className="flex items-center space-x-3">

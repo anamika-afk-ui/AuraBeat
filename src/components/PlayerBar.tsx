@@ -22,6 +22,7 @@ import {
   WifiOff,
   Heart,
   Download,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { SparkProgressBar } from './SparkProgressBar';
 
@@ -47,6 +48,7 @@ interface PlayerBarProps {
   onToggleRepeat: () => void;
   onToggleFavorite?: (songId: string) => void;
   onDownloadToDevice?: (song: Song) => void;
+  onEditSong?: (song: Song) => void;
   onOpenEQ: () => void;
   onOpenLyrics: () => void;
   onOpenSleepTimer: () => void;
@@ -78,6 +80,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
   onToggleRepeat,
   onToggleFavorite,
   onDownloadToDevice,
+  onEditSong,
   onOpenEQ,
   onOpenLyrics,
   onOpenSleepTimer,
@@ -91,7 +94,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
   const boostPercent = Math.round(eqSettings.volumeBoost * 100);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-xl border-t border-white/10 px-4 py-2 shadow-2xl">
+    <div className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-x-hidden bg-zinc-950/95 backdrop-blur-xl border-t border-white/10 px-2.5 sm:px-4 py-2 shadow-2xl">
       {/* Top Spark Seek Progress Bar */}
       <div className="relative w-full -mt-1 mb-1">
         <SparkProgressBar
@@ -104,9 +107,9 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
         />
       </div>
 
-      <div className="flex items-center justify-between gap-2 md:gap-6">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-4 md:gap-6 w-full max-w-full">
         {/* Left: Song Info + Favorite & Download */}
-        <div className="flex items-center space-x-3 min-w-0 max-w-[240px] md:max-w-xs">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 max-w-[130px] sm:max-w-[200px] md:max-w-xs shrink">
           <div
             onClick={onOpenFullPlayer}
             className="relative shrink-0 cursor-pointer group"
@@ -168,18 +171,18 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
             </button>
           )}
 
-          {/* Quick Download to Device button for online songs */}
-          {onDownloadToDevice && (!currentSong.isOffline || currentSong.isCloudShared) && (
+          {/* Quick Edit Cover & Publish Online */}
+          {onEditSong && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onDownloadToDevice(currentSong);
+                onEditSong(currentSong);
               }}
-              className="p-1.5 rounded-full text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-              title="डिवाइस में डाउनलोड करें (Save to device storage & offline)"
+              className="p-1.5 rounded-full text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/20 transition-colors cursor-pointer"
+              title="कवर बदलें और ऑनलाइन पब्लिश करें (Change Cover & Publish Online)"
             >
-              <Download className="w-4 h-4" />
+              <ImageIcon className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -249,43 +252,43 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
         </div>
 
         {/* Right: 300% Boost Badge & Feature Shortcuts */}
-        <div className="flex items-center space-x-2 md:space-x-3 shrink-0">
+        <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 shrink-0">
           {/* 300% Super Boost Button */}
           <button
             onClick={onOpenEQ}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
+            className={`flex items-center space-x-0.5 sm:space-x-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-bold transition-all ${
               boostPercent > 100
-                ? 'bg-gradient-to-r from-red-600 via-amber-500 to-amber-400 text-black shadow-lg shadow-amber-500/30 animate-pulse'
+                ? 'bg-gradient-to-r from-red-600 via-amber-500 to-amber-400 text-black shadow-md shadow-amber-500/20 animate-pulse'
                 : 'bg-zinc-800 text-zinc-300 hover:text-white'
             }`}
             title="Audio Equalizer & 300% Volume Boost"
           >
-            <Flame className={`w-3.5 h-3.5 ${boostPercent > 100 ? 'fill-black' : 'text-amber-400'}`} />
+            <Flame className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${boostPercent > 100 ? 'fill-black' : 'text-amber-400'}`} />
             <span>{boostPercent}%</span>
           </button>
 
           {/* Karaoke Lyrics */}
           <button
             onClick={onOpenLyrics}
-            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-1.5 sm:p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
             title="Synced Karaoke Lyrics"
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Dual Device / Party Sync */}
           <button
             onClick={onOpenSync}
-            className={`p-2 rounded-xl transition-all relative ${
+            className={`p-1.5 sm:p-2 rounded-xl transition-all relative ${
               syncConnected
                 ? 'text-emerald-400 bg-emerald-500/20 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-500/40'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
             title="Listen Together & Dual Device Sync"
           >
-            <Radio className={`w-4 h-4 ${syncConnected ? 'animate-pulse' : ''}`} />
+            <Radio className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${syncConnected ? 'animate-pulse' : ''}`} />
             {syncConnected && (
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute top-1.5 right-1.5" />
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full absolute top-1 right-1" />
             )}
           </button>
 
