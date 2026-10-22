@@ -1253,6 +1253,7 @@ export default function App() {
               </>
             )}
           </button>
+        </div>
       </header>
 
       {/* Playback Error / Status Banner */}
