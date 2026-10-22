@@ -44,6 +44,7 @@ class SyncClient {
   private latencyMs: number = 0;
   private listeners: Set<SyncCallback> = new Set();
   private pingInterval: any = null;
+  private httpPollInterval: any = null;
   private isExplicitlyDisconnected: boolean = true;
 
   constructor() {
@@ -169,7 +170,10 @@ class SyncClient {
     // 2. Initialize WebSocket fallback (if running on server with ws support)
     this.initWebSocket(cleanCode);
 
-    // 3. Mirror join to BroadcastChannel
+    // 3. Initialize serverless HTTP fallback for Vercel where WebSockets are not persistent
+    this.startHttpPolling(cleanCode);
+
+    // 4. Mirror join to BroadcastChannel
     try {
       this.broadcastChannel?.postMessage({
         type: 'BC_MEMBER_JOIN',
@@ -358,6 +362,63 @@ class SyncClient {
     } catch {
       // Serverless environment
     }
+  }
+
+  /**
+   * Serverless HTTP polling fallback for Vercel deployments.
+   */
+  private startHttpPolling(code: string) {
+    if (this.httpPollInterval) clearInterval(this.httpPollInterval);
+    this.httpPollInterval = setInterval(async () => {
+      if (!this.roomCode || this.isExplicitlyDisconnected) return;
+      try {
+        const resp = await fetch(`/api/sync/rooms/${code}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.room) {
+            const room = data.room;
+            if (!this.isHost && room.updatedAt > this.lastUpdateTimestamp) {
+              this.currentSongId = room.currentSongId;
+              this.isPlaying = room.isPlaying;
+              this.positionSec = room.positionSec;
+              this.lastUpdateTimestamp = room.updatedAt;
+              this.notify({
+                type: 'STATE_UPDATE',
+                data: {
+                  songId: room.currentSongId,
+                  isPlaying: room.isPlaying,
+                  positionSec: room.positionSec,
+                  updatedAt: room.updatedAt,
+                  action: 'sync',
+                },
+              });
+            }
+            if (Array.isArray(room.members)) {
+              let membersChanged = false;
+              room.members.forEach((m: any) => {
+                if (!this.members.has(m.id)) {
+                  this.members.set(m.id, {
+                    id: m.id,
+                    name: m.name,
+                    isHost: m.isHost,
+                    stereoChannel: m.stereoChannel as any,
+                  });
+                  membersChanged = true;
+                }
+              });
+              if (membersChanged) {
+                this.notify({
+                  type: 'MEMBERS_UPDATE',
+                  data: Array.from(this.members.values()),
+                });
+              }
+            }
+          }
+        }
+      } catch {
+        // Safe to ignore in background polling
+      }
+    }, 2500);
   }
 
   /**
@@ -694,6 +755,25 @@ class SyncClient {
       // ignore
     }
 
+    // 4. Serverless HTTP API dispatch (Vercel fallback)
+    try {
+      fetch(`/api/sync/rooms/${this.roomCode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: this.userId,
+          userName: this.userName,
+          isHost: this.isHost,
+          songId,
+          isPlaying,
+          positionSec,
+          action,
+        }),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
     return true;
   }
 
@@ -817,6 +897,7 @@ class SyncClient {
   public disconnect() {
     this.isExplicitlyDisconnected = true;
     if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this.httpPollInterval) clearInterval(this.httpPollInterval);
 
     if (this.ws) {
       try {

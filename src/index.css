@@ -87,30 +87,57 @@ html, body, #root {
   }
 }
 
+.gpu-accelerated {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
 .animate-spark-float-1 {
   animation: sparkFloat 1.2s infinite ease-out;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .animate-spark-float-2 {
   animation: sparkFloatAlt 1.5s infinite ease-out 0.25s;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .animate-spark-float-3 {
   animation: sparkFloatSlow 1.8s infinite ease-out 0.5s;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .animate-spark-float-4 {
   animation: sparkFloat 1.4s infinite ease-out 0.75s;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .animate-spark-flicker {
   animation: sparkFlicker 1.8s infinite ease-in-out;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .animate-shimmer-sweep {
   animation: sparkShimmerSweep 2.4s infinite linear;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .spark-dot-glow {
   animation: auraPulse 2s infinite ease-in-out;
+  will-change: box-shadow;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }

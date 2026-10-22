@@ -32,6 +32,10 @@ class AudioEngine {
   private analyserNode: AnalyserNode | null = null;
   private isInitialized = false;
 
+  public isSupported(): boolean {
+    return typeof window !== 'undefined' && !!(window.AudioContext || (window as any).webkitAudioContext);
+  }
+
   public init(audioEl: HTMLAudioElement) {
     if (this.isInitialized && this.audioElement === audioEl) return;
     this.audioElement = audioEl;
@@ -76,13 +80,13 @@ class AudioEngine {
       this.boostGainNode = this.audioCtx.createGain();
       this.boostGainNode.gain.value = 1.0;
 
-      // 5. Dynamic compressor / brickwall limiter to protect against distortion at 300%
+      // 5. Dynamic compressor / brickwall limiter to prevent digital clipping
       this.compressorNode = this.audioCtx.createDynamicsCompressor();
-      this.compressorNode.threshold.value = -16;
-      this.compressorNode.knee.value = 30;
-      this.compressorNode.ratio.value = 12;
-      this.compressorNode.attack.value = 0.003;
-      this.compressorNode.release.value = 0.25;
+      this.compressorNode.threshold.value = -14;
+      this.compressorNode.knee.value = 12;
+      this.compressorNode.ratio.value = 16;
+      this.compressorNode.attack.value = 0.002;
+      this.compressorNode.release.value = 0.2;
 
       // 6. Stereo Panner
       if (this.audioCtx.createStereoPanner) {
@@ -126,13 +130,17 @@ class AudioEngine {
 
       this.isInitialized = true;
     } catch (e) {
-      console.error('AudioEngine initialization error:', e);
+      console.warn('AudioEngine initialization caught non-fatal exception:', e);
     }
   }
 
   public ensureRunning() {
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+    try {
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+    } catch {
+      // Ignore
     }
   }
 
@@ -140,40 +148,45 @@ class AudioEngine {
     if (!this.audioCtx) return;
     this.ensureRunning();
 
+    const currTime = this.audioCtx.currentTime;
+
     // 1. Equalizer Bands
     if (this.eqFilters.length === settings.bands.length) {
       this.eqFilters.forEach((filter, index) => {
         const gainValue = settings.enabled ? settings.bands[index] : 0;
-        filter.gain.setTargetAtTime(gainValue, this.audioCtx!.currentTime, 0.05);
+        filter.gain.setTargetAtTime(gainValue, currTime, 0.05);
       });
     }
 
     // 2. Bass Boost (0 - 100% -> 0 to 18 dB gain)
     if (this.bassFilter) {
       const bassGain = settings.enabled ? (settings.bassBoost / 100) * 18 : 0;
-      this.bassFilter.gain.setTargetAtTime(bassGain, this.audioCtx.currentTime, 0.05);
+      this.bassFilter.gain.setTargetAtTime(bassGain, currTime, 0.05);
     }
 
     // 3. Virtualizer (0 - 100% -> 0 to 10 dB high shelf)
     if (this.virtualizerFilter) {
       const virtGain = settings.enabled ? (settings.virtualizer / 100) * 10 : 0;
-      this.virtualizerFilter.gain.setTargetAtTime(virtGain, this.audioCtx.currentTime, 0.05);
+      this.virtualizerFilter.gain.setTargetAtTime(virtGain, currTime, 0.05);
     }
 
     // 4. Super Volume Boost (1.0 to 3.0 => 100% to 300%)
     if (this.boostGainNode) {
       const boost = Math.max(1.0, Math.min(3.0, settings.volumeBoost));
-      this.boostGainNode.gain.setTargetAtTime(boost, this.audioCtx.currentTime, 0.05);
+      this.boostGainNode.gain.setTargetAtTime(boost, currTime, 0.05);
     }
 
-    // 5. Limiter / Compressor toggle
+    // 5. Limiter / Compressor dynamic brickwall scaling to prevent clipping at higher boosts
     if (this.compressorNode) {
-      if (settings.limiterEnabled || settings.volumeBoost > 1.2) {
-        this.compressorNode.threshold.setTargetAtTime(-18, this.audioCtx.currentTime, 0.05);
-        this.compressorNode.ratio.setTargetAtTime(14, this.audioCtx.currentTime, 0.05);
+      if (settings.limiterEnabled || settings.volumeBoost > 1.0) {
+        // As volume boost scales from 1.0 to 3.0, push threshold from -12dB down to -28dB
+        const targetThreshold = -12 - (settings.volumeBoost - 1.0) * 8;
+        this.compressorNode.threshold.setTargetAtTime(targetThreshold, currTime, 0.05);
+        this.compressorNode.ratio.setTargetAtTime(16, currTime, 0.05);
+        this.compressorNode.knee.setTargetAtTime(8, currTime, 0.05);
       } else {
-        this.compressorNode.threshold.setTargetAtTime(0, this.audioCtx.currentTime, 0.05);
-        this.compressorNode.ratio.setTargetAtTime(1, this.audioCtx.currentTime, 0.05);
+        this.compressorNode.threshold.setTargetAtTime(0, currTime, 0.05);
+        this.compressorNode.ratio.setTargetAtTime(1, currTime, 0.05);
       }
     }
 
@@ -185,7 +198,7 @@ class AudioEngine {
       } else if (settings.stereoChannelMode === 'right') {
         pan = 1; // hard right
       }
-      this.stereoPannerNode.pan.setTargetAtTime(pan, this.audioCtx.currentTime, 0.05);
+      this.stereoPannerNode.pan.setTargetAtTime(pan, currTime, 0.05);
     }
   }
 

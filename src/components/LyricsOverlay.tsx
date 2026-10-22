@@ -246,9 +246,9 @@ export const LyricsOverlay: React.FC<LyricsOverlayProps> = ({
                   key={`${line.timeSec}-${idx}`}
                   ref={isActive ? activeLineRef : null}
                   onClick={() => onSeek(line.timeSec)}
-                  className={`group transition-all duration-300 cursor-pointer rounded-2xl p-2.5 sm:p-3.5 -mx-2.5 sm:-mx-3.5 ${
+                  className={`group transition-all duration-300 cursor-pointer rounded-2xl p-2.5 sm:p-3.5 -mx-2.5 sm:-mx-3.5 will-change-[transform,opacity] ${
                     isActive
-                      ? 'scale-105 sm:scale-105 origin-center sm:origin-left bg-white/5 backdrop-blur-sm'
+                      ? 'scale-105 sm:scale-105 origin-center sm:origin-left bg-white/5 backdrop-blur-sm gpu-accelerated'
                       : 'hover:bg-white/5 opacity-60 hover:opacity-100'
                   }`}
                 >
@@ -328,7 +328,7 @@ export const LyricsOverlay: React.FC<LyricsOverlayProps> = ({
             className="w-full h-1.5 bg-zinc-800 rounded-full cursor-pointer overflow-hidden relative group"
           >
             <div
-              className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 rounded-full"
+              className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 rounded-full will-change-[width]"
               style={{ width: `${progressPercent}%` }}
             />
           </div>

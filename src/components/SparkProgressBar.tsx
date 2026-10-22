@@ -138,7 +138,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
 
         {/* Floating Sparks Behind the Scrubber Dot (Moving with dot timing) */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none z-20 will-change-[left]"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none z-20 will-change-[left] gpu-accelerated"
           style={{ left: `${progressPercent}%` }}
         >
           {/* The Scrubber Dot */}
@@ -151,7 +151,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
 
           {/* Spark Particle Jet emitting backwards in Light Blue & Light Green */}
           {(isPlaying || isDragging) && (
-            <div className="absolute top-1/2 -translate-y-1/2 right-full mr-1 pointer-events-none flex items-center">
+            <div className="absolute top-1/2 -translate-y-1/2 right-full mr-1 pointer-events-none flex items-center gpu-accelerated">
               {/* Spark 1 (Light Cyan) */}
               <span
                 className="absolute -top-3.5 right-1 animate-spark-float-1 text-[11px] font-bold"
@@ -203,7 +203,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
       {/* Hover preview timestamp tooltip */}
       {hoverPosition && !isDragging && (
         <div
-          className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-zinc-900 border border-white/20 text-[10px] font-mono text-cyan-300 shadow-xl pointer-events-none z-30"
+          className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-zinc-900 border border-white/20 text-[10px] font-mono text-cyan-300 shadow-xl pointer-events-none z-30 will-change-[left]"
           style={{ left: `${hoverPosition.x}px` }}
         >
           {formatTime(hoverPosition.time)}
@@ -213,7 +213,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
       {/* Dragging preview timestamp tooltip */}
       {isDragging && dragTime !== null && (
         <div
-          className="absolute -top-8 -translate-x-1/2 px-2.5 py-1 rounded-md bg-zinc-900/95 border border-cyan-400/50 text-[11px] font-mono font-bold text-emerald-300 shadow-2xl pointer-events-none z-30 animate-pulse"
+          className="absolute -top-8 -translate-x-1/2 px-2.5 py-1 rounded-md bg-zinc-900/95 border border-cyan-400/50 text-[11px] font-mono font-bold text-emerald-300 shadow-2xl pointer-events-none z-30 animate-pulse will-change-[left]"
           style={{ left: `${progressPercent}%` }}
         >
           {formatTime(dragTime)}

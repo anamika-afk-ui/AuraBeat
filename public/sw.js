@@ -42,11 +42,19 @@ self.addEventListener('activate', (event) => {
 
 // Fetch: network-first with cache fallback
 self.addEventListener('fetch', (event) => {
-  // Do not intercept non-GET requests or WebSocket / API sync calls
+  // Do not intercept non-GET requests or WebSocket / API sync / audio streaming calls
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  if (url.pathname.startsWith('/ws') || url.pathname.startsWith('/api')) {
+  if (
+    url.pathname.startsWith('/ws') ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/uploads') ||
+    url.pathname.endsWith('.mp3') ||
+    url.pathname.endsWith('.wav') ||
+    url.pathname.endsWith('.flac') ||
+    url.pathname.endsWith('.aac')
+  ) {
     return;
   }
 

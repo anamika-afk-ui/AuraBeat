@@ -61,7 +61,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
   if (!currentSong) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-x-hidden bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 px-2 sm:px-4 py-2 shadow-2xl">
+    <div className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-x-hidden bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 px-2 sm:px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl gpu-accelerated">
       {/* Top Spark Seek Progress Bar */}
       <div className="relative w-full -mt-1 mb-1.5">
         <SparkProgressBar

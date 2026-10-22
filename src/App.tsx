@@ -86,6 +86,7 @@ export default function App() {
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('all');
   const [queue, setQueue] = useState<Song[]>(DEFAULT_SONGS);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   // Equalizer & 300% Boost settings
   const [eqSettings, setEqSettings] = useState<EqualizerSettings>({
@@ -419,15 +420,22 @@ export default function App() {
 
   // Sleep Timer Interval & Fade Out
   useEffect(() => {
-    if (sleepTimerSeconds === null) return;
+    if (sleepTimerSeconds === null) {
+      // Restore intended volume if sleep timer was cancelled
+      if (audioRef.current) {
+        audioRef.current.volume = isMuted ? 0 : volume;
+      }
+      return;
+    }
 
     const timer = setInterval(() => {
       setSleepTimerSeconds((prev) => {
         if (prev === null || prev <= 1) {
           clearInterval(timer);
-          // Pause playback
+          // Pause playback and restore intended volume
           if (audioRef.current) {
             audioRef.current.pause();
+            audioRef.current.volume = isMuted ? 0 : volume;
             setIsPlaying(false);
           }
           return null;
@@ -435,7 +443,7 @@ export default function App() {
 
         // Smooth fade out in the last 30 seconds
         if (sleepFadeOut && prev <= 30 && audioRef.current) {
-          const targetVol = Math.max(0.05, (prev / 30) * volume);
+          const targetVol = Math.max(0.02, (prev / 30) * volume);
           audioRef.current.volume = targetVol;
         }
 
@@ -444,24 +452,26 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [sleepTimerSeconds, sleepFadeOut, volume]);
+  }, [sleepTimerSeconds, sleepFadeOut, volume, isMuted]);
 
-  // Track listening minutes (optimized: save to IndexedDB every 30s instead of every 1s)
+  // Track listening minutes (only while audio is genuinely playing, save to IndexedDB every 30s)
   useEffect(() => {
     if (!isPlaying) return;
     let ticks = 0;
     const interval = setInterval(() => {
-      ticks++;
-      setUserProfile((prev) => {
-        const updated = {
-          ...prev,
-          totalMinutesListened: prev.totalMinutesListened + 1 / 60,
-        };
-        if (ticks % 30 === 0) {
-          saveSetting('user_profile', updated);
-        }
-        return updated;
-      });
+      if (audioRef.current && !audioRef.current.paused && !audioRef.current.ended && audioRef.current.currentTime > 0) {
+        ticks++;
+        setUserProfile((prev) => {
+          const updated = {
+            ...prev,
+            totalMinutesListened: Number((prev.totalMinutesListened + 1 / 60).toFixed(2)),
+          };
+          if (ticks % 30 === 0) {
+            saveSetting('user_profile', updated);
+          }
+          return updated;
+        });
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, [isPlaying]);
@@ -535,21 +545,30 @@ export default function App() {
             })
             .catch((err) => {
               console.warn('Playback play() was prevented or interrupted:', err);
-              // 1. Fallback for offline songs or local uploads saved in browser IndexedDB
+              if (err?.name === 'NotAllowedError') {
+                setIsPlaying(false);
+                setPlaybackError('Autoplay was prevented by browser policy. Please tap Play.');
+                return;
+              }
+              // Attempt to play cached IndexedDB offline blob
               getAudioBlob(targetSong.id).then((blob) => {
                 if (blob && audioRef.current) {
                   audioRef.current.src = URL.createObjectURL(blob);
                   audioRef.current.load();
-                  audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                  audioRef.current.play().then(() => {
+                    setIsPlaying(true);
+                    setPlaybackError(null);
+                  }).catch(() => {
+                    setIsPlaying(false);
+                    setPlaybackError(`"${targetSong.title}" is currently unavailable or audio source cannot be reached.`);
+                  });
                 } else {
-                  // 2. Reliable streaming fallback so audio ALWAYS plays on 1 click
-                  const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-                  if (audioRef.current && audioRef.current.src !== fallbackUrl) {
-                    audioRef.current.src = fallbackUrl;
-                    audioRef.current.load();
-                    audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-                  }
+                  setIsPlaying(false);
+                  setPlaybackError(`"${targetSong.title}" is currently unavailable or audio source cannot be reached.`);
                 }
+              }).catch(() => {
+                setIsPlaying(false);
+                setPlaybackError(`"${targetSong.title}" is currently unavailable or audio source cannot be reached.`);
               });
             });
         }
@@ -1023,10 +1042,13 @@ export default function App() {
 
   // Filter songs based on search & tab
   const filteredSongs = songs.filter((s) => {
+    const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.genre && s.genre.toLowerCase().includes(searchQuery.toLowerCase()));
+      !q ||
+      s.title.toLowerCase().includes(q) ||
+      s.artist.toLowerCase().includes(q) ||
+      (s.album && s.album.toLowerCase().includes(q)) ||
+      (s.genre && s.genre.toLowerCase().includes(q));
 
     if (!matchesSearch) return false;
 
@@ -1095,18 +1117,22 @@ export default function App() {
           const mediaError = audioRef.current?.error;
           console.warn('Audio playback error:', mediaError?.code, mediaError?.message, e);
           setIsPlaying(false);
-          // Auto recover with verified audio fallback so user always hears music
           if (audioRef.current && currentSong) {
             getAudioBlob(currentSong.id).then((blob) => {
               if (blob && audioRef.current) {
                 audioRef.current.src = URL.createObjectURL(blob);
                 audioRef.current.load();
-                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-              } else if (audioRef.current && !audioRef.current.src.includes('SoundHelix')) {
-                audioRef.current.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-                audioRef.current.load();
-                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                audioRef.current.play().then(() => {
+                  setIsPlaying(true);
+                  setPlaybackError(null);
+                }).catch(() => {
+                  setPlaybackError(`"${currentSong.title}" is unavailable or audio stream cannot be played.`);
+                });
+              } else {
+                setPlaybackError(`"${currentSong.title}" is unavailable or audio stream cannot be played.`);
               }
+            }).catch(() => {
+              setPlaybackError(`"${currentSong.title}" is unavailable or audio stream cannot be played.`);
             });
           }
         }}
@@ -1227,8 +1253,23 @@ export default function App() {
               </>
             )}
           </button>
-        </div>
       </header>
+
+      {/* Playback Error / Status Banner */}
+      {playbackError && (
+        <div className="mx-3 sm:mx-4 md:mx-8 mt-3 p-3 bg-red-950/80 border border-red-500/40 rounded-2xl text-red-200 text-xs flex items-center justify-between backdrop-blur-md shadow-lg animate-in fade-in">
+          <div className="flex items-center space-x-2">
+            <span className="text-base">⚠️</span>
+            <span className="font-medium">{playbackError}</span>
+          </div>
+          <button
+            onClick={() => setPlaybackError(null)}
+            className="ml-3 px-2.5 py-1 text-xs font-semibold rounded-xl bg-red-900/50 hover:bg-red-800 text-red-200 hover:text-white transition-colors cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* HERO SECTION WITH REAL-TIME VISUALIZER & DUAL DEVICE BANNER */}
       <div className="relative px-4 md:px-8 pt-6 pb-4 max-w-7xl mx-auto w-full">
