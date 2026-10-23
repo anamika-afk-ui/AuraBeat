@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Song, Playlist, EqualizerSettings, ThemeConfig, UserProfile } from './types';
+import { Song, Playlist, EqualizerSettings, ThemeConfig, UserProfile, isUserAdmin, ADMIN_EMAILS } from './types';
 import { DEFAULT_SONGS, PRESET_THEMES } from './data/defaultSongs';
 import { BUNDLED_PUBLISHED_SONGS } from './data/publishedSongs';
 import { audioEngine, EQ_PRESETS } from './utils/audioEngine';
@@ -32,6 +32,7 @@ import { DeviceAudioPermissionModal } from './components/DeviceAudioPermissionMo
 import { LyricsOverlay } from './components/LyricsOverlay';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { AdminPanelModal } from './components/AdminPanelModal';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
 import confetti from 'canvas-confetti';
 import {
   Play,
@@ -108,16 +109,29 @@ export default function App() {
   const [currentTheme, setCurrentTheme] = useState<ThemeConfig>(PRESET_THEMES[0]);
   const [customThemes, setCustomThemes] = useState<ThemeConfig[]>([]);
 
-  // User Profile & Stats
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    id: 'usr_main',
-    name: 'Aura Music Master',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-    totalMinutesListened: 142,
-    songsPlayedCount: 38,
-    favoriteGenre: 'Synthwave / Bass',
-    isLoggedIn: true,
+  // User Profile & Stats (Strictly recognizing authorized admins: itsmejkr66@gmail.com & jk74898713@gmail.com)
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    try {
+      const saved = localStorage.getItem('aurabeat_user_profile');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      id: 'usr_jk_admin',
+      name: 'JK Admin',
+      email: 'jk74898713@gmail.com',
+      avatar: '/logo.png',
+      totalMinutesListened: 240,
+      songsPlayedCount: 54,
+      favoriteGenre: 'Bass & Electronic',
+      isLoggedIn: true,
+    };
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('aurabeat_user_profile', JSON.stringify(userProfile));
+    } catch {}
+  }, [userProfile]);
 
   // Playlists
   const [playlists, setPlaylists] = useState<Playlist[]>([
@@ -161,9 +175,23 @@ export default function App() {
   const [isLyricsOverlayOpen, setIsLyricsOverlayOpen] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [isHeaderSearchExpanded, setIsHeaderSearchExpanded] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'artist' | 'duration'>('date');
   const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'artists' | 'playlists' | 'cloud' | 'offline'>('all');
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+
+  // Global Keyboard Shortcut (Ctrl+K or Cmd+K) to search songs, playlists, artists
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsGlobalSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Cloud Online Upload state & feedback
   const [blobUploadingCount, setBlobUploadingCount] = useState<number>(0);
@@ -743,7 +771,10 @@ export default function App() {
         });
       }
 
-      const adminKey = localStorage.getItem('aurabeat_admin_key') || 'AuraBeatSecretKey26';
+      const adminKey = localStorage.getItem('aurabeat_admin_key') || '';
+      if (!adminKey) {
+        throw new Error('Admin passkey missing. Kripya pehle Admin Panel se passkey enter karke unlock karein.');
+      }
       const blobToken = localStorage.getItem('aurabeat_blob_token') || undefined;
 
       const headers: Record<string, string> = {
@@ -1166,8 +1197,22 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen w-full max-w-full overflow-x-hidden flex flex-col bg-gradient-to-b ${currentTheme.bgGradient} text-white font-sans transition-colors duration-500 pb-28 select-none`}
+      className={`min-h-screen w-full max-w-full overflow-x-hidden flex flex-col bg-gradient-to-b ${currentTheme.bgGradient} text-white font-sans transition-colors duration-500 pb-28 select-none relative`}
     >
+      {/* Floating Ambient Glowing Mesh (Halka Green & Blue Glowing Glass Aesthetic) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div
+          className="absolute -top-36 -left-36 w-80 sm:w-[520px] h-80 sm:h-[520px] rounded-full bg-cyan-500/15 blur-[120px] pointer-events-none animate-pulse"
+          style={{ animationDuration: '6s' }}
+        />
+        <div
+          className="absolute top-1/4 -right-36 w-80 sm:w-[550px] h-80 sm:h-[550px] rounded-full bg-emerald-500/15 blur-[130px] pointer-events-none animate-pulse"
+          style={{ animationDuration: '8s' }}
+        />
+        <div
+          className="absolute -bottom-24 left-1/3 w-80 sm:w-[600px] h-80 sm:h-[450px] rounded-full bg-teal-400/12 blur-[140px] pointer-events-none"
+        />
+      </div>
       {/* Hidden Core Audio Element */}
       <audio
         ref={audioRef}
@@ -1231,22 +1276,32 @@ export default function App() {
             />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center space-x-1.5 sm:space-x-2">
-              <h1 className="text-sm sm:text-base md:text-lg font-extrabold tracking-tight text-white truncate">
-                AuraBeat
-              </h1>
-              <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-red-500 to-amber-500 text-black shrink-0">
-                300% BOOST
-              </span>
-            </div>
+            <h1 className="text-sm sm:text-base md:text-lg font-extrabold tracking-tight text-white truncate">
+              AuraBeat
+            </h1>
             <p className="text-[10px] text-zinc-400 hidden sm:block truncate">
               10-Band EQ • Offline Storage • Dual-Device Sync
             </p>
           </div>
         </div>
 
-        {/* Top Status & Shortcut Pills */}
+        {/* Top Status & Shortcut Controls */}
         <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+          {/* Global Search Button - Small glowing button, expands on click or Ctrl+K */}
+          <button
+            type="button"
+            onClick={() => setIsGlobalSearchOpen(true)}
+            className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-cyan-500/15 hover:from-emerald-500/25 hover:to-cyan-500/25 border border-cyan-400/40 hover:border-emerald-400/60 text-cyan-300 hover:text-white text-xs font-semibold shadow-[0_0_12px_rgba(6,182,212,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all shrink-0 cursor-pointer group active:scale-95"
+            title="Global Search across songs, artists, playlists (Ctrl + K)"
+          >
+            <Search className="w-3.5 h-3.5 text-cyan-300 group-hover:text-emerald-300 transition-colors animate-pulse" />
+            <span className="hidden sm:inline text-[11px] font-bold text-zinc-200 group-hover:text-white">
+              Search
+            </span>
+            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/50 text-emerald-300 border border-emerald-500/30 shadow-xs">
+              Ctrl K
+            </kbd>
+          </button>
           {/* Party Mode Room Badge - ONLY shown if in an active room, compact */}
           {syncConnected && (
             <button
@@ -1262,19 +1317,6 @@ export default function App() {
             </button>
           )}
 
-          {/* 300% Boost Quick Pill */}
-          <button
-            onClick={() => setIsEQOpen(true)}
-            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${
-              boostPercent > 100
-                ? 'bg-gradient-to-r from-red-600 via-amber-500 to-amber-400 text-black shadow-md shadow-amber-500/20'
-                : 'bg-zinc-800 text-zinc-300 hover:text-white'
-            }`}
-          >
-            <Flame className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${boostPercent > 100 ? 'fill-black' : 'text-amber-400'}`} />
-            <span>{boostPercent}%</span>
-          </button>
-
           {/* Sleep Timer Indicator Pill */}
           {sleepTimerSeconds !== null && sleepTimerSeconds > 0 && (
             <button
@@ -1286,16 +1328,6 @@ export default function App() {
             </button>
           )}
 
-          {/* Install on Mobile / PWA Button */}
-          <button
-            onClick={() => setIsInstallOpen(true)}
-            className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black text-[11px] sm:text-xs font-bold shadow-md shadow-emerald-500/20 hover:opacity-95 transition-all shrink-0"
-            title="Download / Install on Mobile"
-          >
-            <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            <span className="hidden md:inline">Install</span>
-          </button>
-
           {/* Theme Selector */}
           <button
             onClick={() => setIsThemeOpen(true)}
@@ -1305,37 +1337,39 @@ export default function App() {
             <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
-          {/* Admin Control Panel Button */}
-          <button
-            onClick={() => setIsAdminModalOpen(true)}
-            className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 hover:from-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-[11px] sm:text-xs font-bold transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
-            title="Admin Panel (Passkey se songs publish karein)"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Admin</span>
-          </button>
-
-          {/* User Account / Sign In */}
+          {/* User Account / Profile */}
           <button
             onClick={() => setIsUserOpen(true)}
             className={`flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2 py-1 rounded-xl border transition-all shrink-0 cursor-pointer ${
               userProfile.isLoggedIn
-                ? 'bg-zinc-800/80 hover:ring-2 hover:ring-cyan-400 border-white/10'
+                ? isUserAdmin(userProfile.email)
+                  ? 'bg-amber-500/10 hover:ring-2 hover:ring-amber-400 border-amber-500/30 text-amber-300'
+                  : 'bg-zinc-800/80 hover:ring-2 hover:ring-cyan-400 border-white/10'
                 : 'bg-gradient-to-r from-cyan-500/25 to-blue-500/20 hover:from-cyan-500/35 border-cyan-400/30 text-cyan-300'
             }`}
-            title={userProfile.isLoggedIn ? `Account (${userProfile.name})` : 'Sign In / Sign Up'}
+            title={userProfile.isLoggedIn ? `Account (${userProfile.name}${isUserAdmin(userProfile.email) ? ' • Admin' : ''})` : 'Sign In / Sign Up'}
           >
             {userProfile.isLoggedIn ? (
-              <>
-                <img
-                  src={userProfile.avatar}
-                  alt={userProfile.name}
-                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-cover ring-1 ring-cyan-400/40"
-                />
+              <div className="flex items-center space-x-1.5">
+                <div className="relative">
+                  <img
+                    src={userProfile.avatar}
+                    alt={userProfile.name}
+                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-cover ring-1 ${isUserAdmin(userProfile.email) ? 'ring-amber-400' : 'ring-cyan-400/40'}`}
+                  />
+                  {isUserAdmin(userProfile.email) && (
+                    <span
+                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-amber-500 text-black rounded-full flex items-center justify-center text-[8px] font-black shadow-sm"
+                      title="Admin Account Verified"
+                    >
+                      ★
+                    </span>
+                  )}
+                </div>
                 <span className="hidden lg:inline text-xs font-semibold text-zinc-200 max-w-[70px] truncate">
                   {userProfile.name.split(' ')[0]}
                 </span>
-              </>
+              </div>
             ) : (
               <>
                 <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
@@ -1910,17 +1944,21 @@ export default function App() {
                   Online Songs (Live Streaming)
                 </h3>
                 <p className="text-xs text-zinc-300 mt-1 max-w-2xl leading-relaxed">
-                  Yahan sabhi online songs live stream ho rahe hain. Admin panel se naye songs publish karein taaki sabhi users online sun saken.
+                  {isUserAdmin(userProfile.email)
+                    ? 'Yahan sabhi online songs live stream ho rahe hain. Admin panel se naye songs publish karein taaki sabhi users online sun saken.'
+                    : 'Yahan sabhi online songs live stream ho rahe hain. Bina phone storage use kiye high-fidelity online streaming ka aanand lein.'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsAdminModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Admin: Publish Song</span>
-              </button>
+              {isUserAdmin(userProfile.email) && (
+                <button
+                  type="button"
+                  onClick={() => setIsAdminModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Admin: Publish Song</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1937,18 +1975,22 @@ export default function App() {
                     </div>
                     <h4 className="text-base font-bold text-white">Online Library me abhi koi gaana nahi hai</h4>
                     <p className="text-xs text-zinc-400 leading-relaxed">
-                      Admin panel se songs publish karein taaki sabhi users ke liye gaane yahan online live play ho saken.
+                      {isUserAdmin(userProfile.email)
+                        ? 'Admin panel se songs publish karein taaki sabhi users ke liye gaane yahan online live play ho saken.'
+                        : 'Jald hi yahan naye online tracks add kiye jaayenge!'}
                     </p>
-                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsAdminModalOpen(true)}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 hover:opacity-95 cursor-pointer flex items-center space-x-1.5"
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>Admin Portal Kholein</span>
-                      </button>
-                    </div>
+                    {isUserAdmin(userProfile.email) && (
+                      <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsAdminModalOpen(true)}
+                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 hover:opacity-95 cursor-pointer flex items-center space-x-1.5"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Admin Portal Kholein</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -2357,10 +2399,14 @@ export default function App() {
           setQueue((prev) => prev.map((s) => ({ ...s, isOffline: false })));
         }}
         accentColor={currentTheme.primaryColor}
-        onOpenAdminPanel={() => {
-          setIsUserOpen(false);
-          setIsAdminModalOpen(true);
-        }}
+        onOpenAdminPanel={
+          isUserAdmin(userProfile.email)
+            ? () => {
+                setIsUserOpen(false);
+                setIsAdminModalOpen(true);
+              }
+            : undefined
+        }
       />
 
       {/* INSTALL ON MOBILE MODAL */}
@@ -2379,6 +2425,7 @@ export default function App() {
         onPublishToCloud={handlePublishSongToCloud}
         onDeleteSong={handleDeleteSong}
         accentColor={currentTheme.primaryColor}
+        userEmail={userProfile.email}
       />
 
       {/* DEVICE AUDIO ACCESS & AUTO-SCAN MODAL */}
@@ -2414,32 +2461,63 @@ export default function App() {
         accentColor={currentTheme.primaryColor}
       />
 
-      {/* DEDICATED ADMIN CONTROL PORTAL */}
-      <AdminPanelModal
-        isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
+      {/* DEDICATED ADMIN CONTROL PORTAL - STRICTLY for authorized emails only */}
+      {isAdminModalOpen && isUserAdmin(userProfile.email) && (
+        <AdminPanelModal
+          isOpen={isAdminModalOpen}
+          onClose={() => setIsAdminModalOpen(false)}
+          songs={songs}
+          userEmail={userProfile.email}
+          onSongPublished={(newSong) => {
+            setSongs((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
+            setQueue((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
+            saveSongMetadata(newSong);
+          }}
+          onSongDeleted={(songId) => {
+            setSongs((prev) => prev.filter((s) => s.id !== songId));
+            setQueue((prev) => prev.filter((s) => s.id !== songId));
+            deleteSavedSong(songId).catch(() => {});
+          }}
+          onPlaySong={(s) => {
+            const idx = songs.findIndex((x) => x.id === s.id);
+            if (idx !== -1) {
+              playSong(idx, s);
+            } else {
+              setSongs((prev) => [s, ...prev]);
+              setQueue((prev) => [s, ...prev]);
+              playSong(0, s);
+            }
+          }}
+          accentColor={currentTheme.primaryColor}
+        />
+      )}
+
+      {/* GLOBAL PERSISTENT SEARCH MODAL (Ctrl + K) */}
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
         songs={songs}
-        onSongPublished={(newSong) => {
-          setSongs((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
-          setQueue((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
-          saveSongMetadata(newSong);
-        }}
-        onSongDeleted={(songId) => {
-          setSongs((prev) => prev.filter((s) => s.id !== songId));
-          setQueue((prev) => prev.filter((s) => s.id !== songId));
-          deleteSavedSong(songId).catch(() => {});
-        }}
-        onPlaySong={(s) => {
-          const idx = songs.findIndex((x) => x.id === s.id);
+        playlists={playlists}
+        currentSong={currentSong}
+        isPlaying={isPlaying}
+        onPlaySong={(song) => {
+          const idx = songs.findIndex((x) => x.id === song.id);
           if (idx !== -1) {
-            playSong(idx, s);
+            playSong(idx, song);
           } else {
-            setSongs((prev) => [s, ...prev]);
-            setQueue((prev) => [s, ...prev]);
-            playSong(0, s);
+            setSongs((prev) => [song, ...prev]);
+            setQueue((prev) => [song, ...prev]);
+            playSong(0, song);
           }
         }}
-        accentColor={currentTheme.primaryColor}
+        onSelectPlaylist={(pl) => {
+          setActiveTab('playlists');
+          setIsPlaylistOpen(true);
+        }}
+        onSelectArtist={(artistName) => {
+          setActiveTab('artists');
+          setSelectedArtist(artistName);
+        }}
       />
     </div>
   );

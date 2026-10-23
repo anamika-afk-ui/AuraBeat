@@ -96,3 +96,13 @@ export interface UserProfile {
   isLoggedIn: boolean;
   joinedAt?: number;
 }
+
+export const ADMIN_EMAILS: readonly string[] = [
+  'itsmejkr66@gmail.com',
+  'jk74898713@gmail.com',
+];
+
+export const isUserAdmin = (email?: string | null): boolean => {
+  if (!email || typeof email !== 'string') return false;
+  return ADMIN_EMAILS.includes(email.trim().toLowerCase());
+};

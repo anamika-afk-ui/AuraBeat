@@ -4,6 +4,17 @@ export const DEFAULT_SONGS: Song[] = [];
 
 export const PRESET_THEMES = [
   {
+    id: 'aura_emerald_cyan',
+    name: 'Aura Glow (Light Green & Blue Glass)',
+    isDark: true,
+    primaryColor: '#06b6d4', // glowing cyan/blue
+    accentColor: '#10b981', // glowing light green
+    bgGradient: 'from-[#020b0e]/90 via-[#041517]/85 to-[#020a0d]/95',
+    cardBg: 'rgba(6, 26, 28, 0.45)',
+    textColor: '#f0fdfa',
+    glassOpacity: 0.65,
+  },
+  {
     id: 'cyberpunk',
     name: 'Cyberpunk Neon',
     isDark: true,

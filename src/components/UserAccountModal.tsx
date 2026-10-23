@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile } from '../types';
+import { UserProfile, isUserAdmin } from '../types';
 import {
   User,
   LogIn,
@@ -76,6 +76,28 @@ function getStoredAccounts(): StoredAccount[] {
     // ignore
   }
   return [
+    {
+      id: 'usr_jk_admin',
+      name: 'JK Admin',
+      email: 'jk74898713@gmail.com',
+      password: 'password123',
+      avatar: '/logo.png',
+      favoriteGenre: 'Bass & Electronic',
+      totalMinutesListened: 240,
+      songsPlayedCount: 54,
+      createdAt: Date.now() - 86400000 * 60,
+    },
+    {
+      id: 'usr_itsme_admin',
+      name: 'JKR Admin',
+      email: 'itsmejkr66@gmail.com',
+      password: 'password123',
+      avatar: '/logo.png',
+      favoriteGenre: 'Synthwave / Hi-Fi',
+      totalMinutesListened: 190,
+      songsPlayedCount: 42,
+      createdAt: Date.now() - 86400000 * 60,
+    },
     {
       id: 'demo_user_1',
       name: 'Aura Music Master',
@@ -1041,20 +1063,34 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
               </div>
             </div>
 
-            {/* Admin Control Panel Access */}
-            {onOpenAdminPanel && (
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenAdminPanel();
-                  }}
-                  className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-indigo-500/20 hover:from-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all shadow-md cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <span>Admin Portal (Publish & Manage Online Songs)</span>
-                </button>
+            {/* Admin Control Panel Access - Strictly for authorized admin accounts */}
+            {onOpenAdminPanel && isUserAdmin(profile.email) && (
+              <div className="pt-2">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-indigo-500/15 border border-amber-500/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <ShieldCheck className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold text-amber-300">Authorized Admin Account</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Verified
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300">
+                    Aapka account admin access ke liye authorized hai ({profile.email}). Yahan se online library me songs upload aur manage karein.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenAdminPanel();
+                    }}
+                    className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-black font-extrabold text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Open Admin Panel (Publish & Manage)</span>
+                  </button>
+                </div>
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Song } from '../types';
+import { Song, isUserAdmin } from '../types';
 import { Image, Upload, Globe, Check, X, Sparkles, Music, Loader2, Trash2 } from 'lucide-react';
 
 interface EditSongModalProps {
@@ -10,6 +10,7 @@ interface EditSongModalProps {
   onPublishToCloud?: (song: Song) => Promise<void>;
   onDeleteSong?: (songId: string) => void;
   accentColor?: string;
+  userEmail?: string;
 }
 
 const PRESET_COVERS = [
@@ -31,6 +32,7 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
   onPublishToCloud,
   onDeleteSong,
   accentColor = '#06b6d4',
+  userEmail,
 }) => {
   if (!isOpen || !song) return null;
 
@@ -46,7 +48,7 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
     () => localStorage.getItem('aurabeat_blob_token') || ''
   );
   const [adminKeyInput, setAdminKeyInput] = useState(
-    () => localStorage.getItem('aurabeat_admin_key') || 'AuraBeatSecretKey26'
+    () => localStorage.getItem('aurabeat_admin_key') || ''
   );
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,94 +222,93 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
             </div>
           </div>
 
-          {/* Publish to Online Library Section */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-zinc-950 to-cyan-950/30 border border-indigo-500/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Globe className="w-4 h-4 text-cyan-400" />
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Online Library me Publish Karein
-                </h4>
+          {/* Publish to Online Library Section (Admin accounts only) */}
+          {isUserAdmin(userEmail) && (
+            <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-zinc-950 to-cyan-950/30 border border-indigo-500/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Globe className="w-4 h-4 text-cyan-400" />
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Online Library me Publish Karein
+                  </h4>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  Admin Tool
+                </span>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                Online Streaming
-              </span>
-            </div>
-            <p className="text-[11px] text-zinc-300 leading-relaxed">
-              Is gaane ko online library me publish karne se ye cloud par save hoga aur AuraBeat ke Online tab me sabhi users ke liye instantly play hoga!
-            </p>
+              <p className="text-[11px] text-zinc-300 leading-relaxed">
+                Is gaane ko online library me publish karne se ye cloud par save hoga aur AuraBeat ke Online tab me sabhi users ke liye instantly play hoga!
+              </p>
 
-            {publishError && (
-              <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-200 text-xs">
-                ⚠️ {publishError}
-              </div>
-            )}
-
-            <button
-              onClick={handlePublishOnline}
-              disabled={isPublishing || publishedSuccess}
-              className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              {isPublishing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Online Publish Ho Raha Hai...</span>
-                </>
-              ) : publishedSuccess ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-300" />
-                  <span>Successfully Published Online!</span>
-                </>
-              ) : (
-                <>
-                  <Globe className="w-4 h-4" />
-                  <span>Publish Online (Sabhi Users Ke Liye)</span>
-                </>
-              )}
-            </button>
-
-            {/* Optional Admin Passkey Config toggle */}
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setShowVercelConfig(!showVercelConfig)}
-                className="text-[10px] text-zinc-400 hover:text-cyan-400 transition-colors flex items-center space-x-1"
-              >
-                <span>⚙️ {showVercelConfig ? 'Hide' : 'Configure'} Admin Passkey (Optional)</span>
-              </button>
-              {showVercelConfig && (
-                <div className="mt-2 p-2.5 rounded-lg bg-black/60 border border-white/10 space-y-2 animate-in fade-in">
-                  <div>
-                    <label className="text-[10px] text-zinc-400 block font-mono">
-                      ADMIN_SECRET_KEY (Publishing Passkey):
-                    </label>
-                    <input
-                      type="password"
-                      placeholder="AuraBeatSecretKey26"
-                      value={adminKeyInput}
-                      onChange={(e) => setAdminKeyInput(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-white/10 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-zinc-400 block font-mono">
-                      BLOB_READ_WRITE_TOKEN (Optional override):
-                    </label>
-                    <input
-                      type="password"
-                      placeholder="vercel_blob_rw_..."
-                      value={blobTokenInput}
-                      onChange={(e) => setBlobTokenInput(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-white/10 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500"
-                    />
-                  </div>
-                  <p className="text-[9px] text-zinc-500">
-                    Server environment me key aur token set hone par yahan daalne ki zaroorat nahi hai.
-                  </p>
+              {publishError && (
+                <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-200 text-xs">
+                  ⚠️ {publishError}
                 </div>
               )}
+
+              <button
+                onClick={handlePublishOnline}
+                disabled={isPublishing || publishedSuccess}
+                className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isPublishing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Online Publish Ho Raha Hai...</span>
+                  </>
+                ) : publishedSuccess ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-300" />
+                    <span>Successfully Published Online!</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-4 h-4" />
+                    <span>Publish Online (Sabhi Users Ke Liye)</span>
+                  </>
+                )}
+              </button>
+
+              {/* Optional Admin Passkey Config toggle */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowVercelConfig(!showVercelConfig)}
+                  className="text-[10px] text-zinc-400 hover:text-cyan-400 transition-colors flex items-center space-x-1"
+                >
+                  <span>⚙️ {showVercelConfig ? 'Hide' : 'Configure'} Admin Passkey (Optional)</span>
+                </button>
+                {showVercelConfig && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-black/60 border border-white/10 space-y-2 animate-in fade-in">
+                    <div>
+                      <label className="text-[10px] text-zinc-400 block font-mono">
+                        ADMIN_SECRET_KEY (Publishing Passkey):
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Admin Passkey daalein..."
+                        value={adminKeyInput}
+                        onChange={(e) => setAdminKeyInput(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-white/10 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-400 block font-mono">
+                        BLOB_READ_WRITE_TOKEN (Optional override):
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Token override..."
+                        value={blobTokenInput}
+                        onChange={(e) => setBlobTokenInput(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-white/10 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer Actions */}

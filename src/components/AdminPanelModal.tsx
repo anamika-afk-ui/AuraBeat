@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Song } from '../types';
+import { Song, isUserAdmin } from '../types';
 import confetti from 'canvas-confetti';
 import {
   ShieldCheck,
@@ -28,6 +28,7 @@ interface AdminPanelModalProps {
   onSongDeleted: (songId: string) => void;
   onPlaySong?: (song: Song) => void;
   accentColor?: string;
+  userEmail?: string;
 }
 
 const PRESET_COVERS = [
@@ -49,9 +50,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onSongDeleted,
   onPlaySong,
   accentColor = '#06b6d4',
+  userEmail,
 }) => {
   const [adminPasskey, setAdminPasskey] = useState(
-    () => localStorage.getItem('aurabeat_admin_key') || 'AuraBeatSecretKey26'
+    () => localStorage.getItem('aurabeat_admin_key') || ''
   );
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('aurabeat_admin_logged_in') === 'true';
@@ -80,7 +82,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isOpen) return null;
+  if (!isOpen || !isUserAdmin(userEmail)) return null;
 
   // Filter online published songs
   const onlineSongs = songs.filter(
@@ -208,7 +210,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
       setPublishStatus('Online library me save ho raha hai...');
 
-      const currentKey = localStorage.getItem('aurabeat_admin_key') || adminPasskey || 'AuraBeatSecretKey26';
+      const currentKey = localStorage.getItem('aurabeat_admin_key') || adminPasskey;
+      if (!currentKey) {
+        throw new Error('Admin passkey missing. Kripya pehle admin passkey enter karein.');
+      }
       const blobToken = localStorage.getItem('aurabeat_blob_token') || undefined;
 
       const headers: Record<string, string> = {
@@ -268,7 +273,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setIsPublishing(true);
 
     try {
-      const currentKey = localStorage.getItem('aurabeat_admin_key') || adminPasskey || 'AuraBeatSecretKey26';
+      const currentKey = localStorage.getItem('aurabeat_admin_key') || adminPasskey;
+      if (!currentKey) {
+        throw new Error('Admin passkey missing. Kripya pehle admin passkey enter karein.');
+      }
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-admin-key': currentKey,
@@ -333,7 +341,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
     setDeletingId(song.id);
     try {
-      const currentKey = localStorage.getItem('aurabeat_admin_key') || adminPasskey || 'AuraBeatSecretKey26';
+      const currentKey = localStorage.getItem('aurabeat_admin_key') || adminPasskey;
+      if (!currentKey) {
+        throw new Error('Admin passkey missing.');
+      }
       const res = await fetch(`/api/catalog/delete/${song.id}`, {
         method: 'DELETE',
         headers: {
