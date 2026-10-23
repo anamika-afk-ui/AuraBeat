@@ -44,11 +44,28 @@ export const VERIFIED_SEED_CATALOG: any[] = [];
  * Helper to retrieve Vercel Blob Read/Write token from request headers or environment variables.
  */
 export function getBlobToken(req?: any): string | undefined {
-  const token =
+  let token =
     req?.headers?.['x-blob-token'] ||
     process.env.BLOB_READ_WRITE_TOKEN ||
     process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
-  return typeof token === 'string' && token.trim().length > 0 ? token.trim() : undefined;
+
+  if (typeof token !== 'string') return undefined;
+
+  // Clean leading and trailing quotation marks and whitespace (often added in .env)
+  token = token.trim().replace(/^["']+|["']+$/g, '').trim();
+
+  // Validate that token is not a placeholder and meets minimum token length
+  if (
+    token.length < 20 ||
+    token.includes('...') ||
+    token.includes('placeholder') ||
+    token.includes('YOUR_') ||
+    token.includes('MY_')
+  ) {
+    return undefined;
+  }
+
+  return token;
 }
 
 /**
@@ -82,8 +99,8 @@ export async function getCloudCatalog(token?: string): Promise<any[]> {
           }
         }
       }
-    } catch (err) {
-      console.warn('Vercel Blob catalog fetch error:', err);
+    } catch {
+      // Graceful fallback to in-memory cache or local catalog
     }
   }
 

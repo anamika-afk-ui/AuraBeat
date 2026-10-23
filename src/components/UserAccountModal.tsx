@@ -15,6 +15,8 @@ import {
   HardDrive,
   Check,
   Upload,
+  Camera,
+  Image as ImageIcon,
   Music,
   Clock,
   Disc,
@@ -129,6 +131,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   const [editEmail, setEditEmail] = useState(profile.email || '');
   const [editGenre, setEditGenre] = useState(profile.favoriteGenre || 'Synthwave');
   const [editAvatar, setEditAvatar] = useState(profile.avatar);
+  const [isChangingPhoto, setIsChangingPhoto] = useState(false);
 
   // Status message
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError?: boolean } | null>(null);
@@ -140,6 +143,8 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       setEditEmail(profile.email || '');
       setEditGenre(profile.favoriteGenre || 'Synthwave');
       setEditAvatar(profile.avatar);
+      setIsChangingPhoto(false);
+      setIsEditingProfile(false);
       setStatusMsg(null);
     }
   }, [isOpen, profile.isLoggedIn, profile.name, profile.email, profile.avatar, profile.favoriteGenre]);
@@ -352,16 +357,44 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     showNotification('Profile details update ho gayi!');
   };
 
-  // Handle custom photo upload
+  // Direct avatar update (saves immediately across active profile, IndexedDB & localStorage)
+  const handleUpdateAvatarDirect = (newAvatarUrl: string) => {
+    const updated: UserProfile = {
+      ...profile,
+      avatar: newAvatarUrl,
+    };
+    onUpdateProfile(updated);
+    setEditAvatar(newAvatarUrl);
+
+    // Also update stored accounts in localStorage
+    const accounts = getStoredAccounts();
+    const idx = accounts.findIndex((a) => a.id === profile.id || a.email === profile.email);
+    if (idx !== -1) {
+      accounts[idx].avatar = newAvatarUrl;
+      saveStoredAccounts(accounts);
+    }
+
+    confetti({ particleCount: 35, spread: 70, origin: { y: 0.6 } });
+    showNotification('Profile photo safaltapoorvak badal di gayi!');
+    setIsChangingPhoto(false);
+  };
+
+  // Handle custom photo upload from gallery or camera
   const handleCustomPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Reset input so user can pick the same file again if desired
+    e.target.value = '';
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
       if (dataUrl) {
         if (tab === 'signup') {
           setRegAvatar(dataUrl);
+        } else if (tab === 'profile' && profile.isLoggedIn) {
+          handleUpdateAvatarDirect(dataUrl);
         } else {
           setEditAvatar(dataUrl);
         }
@@ -698,44 +731,160 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           <div className="mt-4 space-y-4">
             {/* Profile Header Card */}
             <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 flex items-center space-x-3.5">
-              <div className="relative group/avatar">
+              <div className="relative shrink-0">
                 <img
-                  src={profile.avatar}
+                  src={profile.avatar || '/logo.png'}
                   alt={profile.name}
-                  className="w-14 h-14 rounded-2xl object-cover border-2 border-cyan-400 shadow-lg shadow-cyan-500/20"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                  }}
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 shadow-lg shadow-cyan-500/20"
                 />
-                <label className="absolute inset-0 bg-black/60 rounded-2xl opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center cursor-pointer transition-opacity" title="Change Photo">
-                  <Upload className="w-4 h-4 text-white" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleCustomPhotoUpload}
-                    className="hidden"
-                  />
-                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsChangingPhoto(!isChangingPhoto)}
+                  className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-md shadow-cyan-500/30 hover:scale-105 transition-all border border-zinc-900 cursor-pointer"
+                  title="Profile Photo Badlein (Change Photo)"
+                >
+                  <Camera className="w-3.5 h-3.5 text-white" />
+                </button>
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center justify-between">
                   <h3 className="text-base font-extrabold text-white truncate">{profile.name}</h3>
                   <button
-                    onClick={() => setIsEditingProfile(!isEditingProfile)}
+                    type="button"
+                    onClick={() => {
+                      setIsEditingProfile(!isEditingProfile);
+                      if (isChangingPhoto) setIsChangingPhoto(false);
+                    }}
                     className="text-[11px] text-cyan-400 hover:underline font-semibold"
                   >
-                    {isEditingProfile ? 'Close' : 'Edit'}
+                    {isEditingProfile ? 'Close' : 'Edit Info'}
                   </button>
                 </div>
                 <p className="text-xs text-zinc-400 truncate mt-0.5">
                   {profile.email || 'music.member@aurabeat.app'}
                 </p>
-                <div className="flex items-center space-x-1.5 mt-1.5">
+                <div className="flex items-center flex-wrap gap-1.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsChangingPhoto(!isChangingPhoto);
+                      if (isEditingProfile) setIsEditingProfile(false);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-[11px] font-bold transition-all cursor-pointer shadow-sm"
+                  >
+                    <Camera className="w-3 h-3 text-cyan-400" />
+                    <span>{isChangingPhoto ? 'फ़ोटो विकल्प बंद करें' : 'फ़ोटो बदलें (Change Photo)'}</span>
+                  </button>
+
                   <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                     <ShieldCheck className="w-3 h-3" />
-                    <span>Logged In (Hi-Fi Member)</span>
+                    <span>Hi-Fi Member</span>
                   </span>
                 </div>
               </div>
             </div>
+
+            {/* Dedicated Change Profile Photo Drawer */}
+            {isChangingPhoto && (
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-cyan-500/40 space-y-3.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="flex items-center space-x-1.5">
+                    <Camera className="w-4 h-4 text-cyan-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                      Profile Photo Badlein (Change Avatar)
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsChangingPhoto(false)}
+                    className="text-[11px] text-zinc-400 hover:text-white p-1 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Direct Upload Options: Gallery & Camera */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* 1. Phone Gallery / Device Files */}
+                  <label className="flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-cyan-500/20 cursor-pointer transition-all active:scale-98">
+                    <Upload className="w-4 h-4" />
+                    <span>गैलरी से फ़ोटो चुनें (Gallery)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCustomPhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* 2. Live Camera / Selfie */}
+                  <label className="flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 font-bold text-xs shadow-sm cursor-pointer transition-all active:scale-98">
+                    <Camera className="w-4 h-4 text-cyan-400" />
+                    <span>कैमरे से फ़ोटो लें (Camera)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="user"
+                      onChange={handleCustomPhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Preset Avatars & AuraBeat Logo */}
+                <div>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+                    Ya Preset Avatar Chunein (Tap to apply):
+                  </span>
+                  <div className="grid grid-cols-6 sm:grid-cols-7 gap-2">
+                    {/* AuraBeat Brand Squircle Logo */}
+                    <div
+                      onClick={() => handleUpdateAvatarDirect('/logo.png')}
+                      className={`relative rounded-xl overflow-hidden cursor-pointer border-2 transition-all hover:scale-105 aspect-square p-0.5 bg-black ${
+                        profile.avatar === '/logo.png'
+                          ? 'border-cyan-400 ring-2 ring-cyan-400/50 scale-105'
+                          : 'border-white/10 opacity-70 hover:opacity-100'
+                      }`}
+                      title="AuraBeat Logo Squircle"
+                    >
+                      <img src="/logo.png" alt="AuraBeat Logo" className="w-full h-full object-cover rounded-lg" />
+                      {profile.avatar === '/logo.png' && (
+                        <span className="absolute top-0.5 right-0.5 bg-cyan-500 text-black rounded-full p-0.5">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </span>
+                      )}
+                    </div>
+
+                    {AVATAR_PRESETS.map((av, idx) => {
+                      const isSelected = profile.avatar === av;
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => handleUpdateAvatarDirect(av)}
+                          className={`relative rounded-xl overflow-hidden cursor-pointer border-2 transition-all hover:scale-105 aspect-square ${
+                            isSelected
+                              ? 'border-cyan-400 ring-2 ring-cyan-400/50 scale-105'
+                              : 'border-white/10 opacity-70 hover:opacity-100'
+                          }`}
+                          title={`Preset Avatar ${idx + 1}`}
+                        >
+                          <img src={av} alt={`Avatar ${idx + 1}`} className="w-full h-full object-cover" />
+                          {isSelected && (
+                            <span className="absolute top-0.5 right-0.5 bg-cyan-500 text-black rounded-full p-0.5">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Inline Edit Profile Drawer */}
             {isEditingProfile && (
@@ -770,20 +919,44 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
                 <div>
                   <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                    Select Avatar
+                    Select Avatar / Upload Custom Photo
                   </label>
                   <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+                    {/* AuraBeat Brand Logo */}
+                    <img
+                      src="/logo.png"
+                      alt="AuraBeat Logo"
+                      onClick={() => setEditAvatar('/logo.png')}
+                      className={`w-9 h-9 rounded-xl object-cover cursor-pointer border-2 transition-all shrink-0 p-0.5 bg-black ${
+                        editAvatar === '/logo.png' ? 'border-cyan-400 ring-2 ring-cyan-400/50 scale-105' : 'border-white/10 opacity-70'
+                      }`}
+                      title="AuraBeat Logo"
+                    />
+
                     {AVATAR_PRESETS.map((av, idx) => (
                       <img
                         key={idx}
                         src={av}
                         alt={`Preset ${idx}`}
                         onClick={() => setEditAvatar(av)}
-                        className={`w-9 h-9 rounded-full object-cover cursor-pointer border-2 transition-all ${
-                          editAvatar === av ? 'border-cyan-400 scale-105' : 'border-white/10 opacity-70'
+                        className={`w-9 h-9 rounded-full object-cover cursor-pointer border-2 transition-all shrink-0 ${
+                          editAvatar === av ? 'border-cyan-400 ring-2 ring-cyan-400/50 scale-105' : 'border-white/10 opacity-70'
                         }`}
                       />
                     ))}
+
+                    <label
+                      className="w-9 h-9 rounded-xl bg-zinc-800 border-2 border-dashed border-white/20 hover:border-cyan-400 flex items-center justify-center cursor-pointer shrink-0 text-zinc-400 hover:text-white transition-colors"
+                      title="Upload Custom Photo from Device"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCustomPhotoUpload}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
                 </div>
 
