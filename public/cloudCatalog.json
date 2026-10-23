@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "blob_1792755984575_zw2z",
+    "title": "Test Song",
+    "artist": "Test Artist",
+    "album": "Vercel Blob Collection",
+    "duration": 180,
+    "genre": "Soundtrack",
+    "url": "https://xyz.public.blob.vercel-storage.com/aurabeat/songs/test.mp3",
+    "coverArt": "/logo.png",
+    "isCloudShared": true,
+    "storageProvider": "vercel-blob",
+    "addedAt": 1792755984871
+  }
+]

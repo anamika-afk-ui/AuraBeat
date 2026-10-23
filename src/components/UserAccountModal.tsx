@@ -31,6 +31,7 @@ interface UserAccountModalProps {
   offlineCount: number;
   onClearOfflineCache: () => void;
   accentColor?: string;
+  onOpenAdminPanel?: () => void;
 }
 
 interface StoredAccount {
@@ -105,6 +106,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   offlineCount,
   onClearOfflineCache,
   accentColor = '#06b6d4',
+  onOpenAdminPanel,
 }) => {
   // Tab state: 'signin' | 'signup' | 'profile'
   const [tab, setTab] = useState<'signin' | 'signup' | 'profile'>(
@@ -1038,6 +1040,23 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Admin Control Panel Access */}
+            {onOpenAdminPanel && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenAdminPanel();
+                  }}
+                  className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-indigo-500/20 hover:from-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all shadow-md cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span>Admin Portal (Publish & Manage Online Songs)</span>
+                </button>
+              </div>
+            )}
 
             {/* Account Switch & Logout Buttons */}
             <div className="pt-2 flex items-center justify-between">

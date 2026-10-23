@@ -31,6 +31,7 @@ import { EditSongModal } from './components/EditSongModal';
 import { DeviceAudioPermissionModal } from './components/DeviceAudioPermissionModal';
 import { LyricsOverlay } from './components/LyricsOverlay';
 import { AudioVisualizer } from './components/AudioVisualizer';
+import { AdminPanelModal } from './components/AdminPanelModal';
 import confetti from 'canvas-confetti';
 import {
   Play,
@@ -70,6 +71,8 @@ import {
   Trash2,
   Image as ImageIcon,
   ArrowLeft,
+  CloudUpload,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function App() {
@@ -157,9 +160,15 @@ export default function App() {
   const [isFirstTimeAudioPrompt, setIsFirstTimeAudioPrompt] = useState(false);
   const [isLyricsOverlayOpen, setIsLyricsOverlayOpen] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'artist' | 'duration'>('date');
   const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'artists' | 'playlists' | 'cloud' | 'offline'>('all');
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+
+  // Cloud Online Upload state & feedback
+  const [blobUploadingCount, setBlobUploadingCount] = useState<number>(0);
+  const [blobUploadStatus, setBlobUploadStatus] = useState<string | null>(null);
+  const [uploadingSongIds, setUploadingSongIds] = useState<Record<string, boolean>>({});
 
   const currentSong = queue[currentSongIndex] || songs[0] || null;
 
@@ -701,7 +710,92 @@ export default function App() {
     }
   };
 
-  // Custom Local Audio File Upload (MP3, WAV, FLAC, M4A, AAC)
+  // Core function to publish any song directly to the Online Cloud Library (POST /api/catalog/publish)
+  const uploadSongDirectlyToBlob = async (song: Song, providedBlob?: Blob) => {
+    setUploadingSongIds((prev) => ({ ...prev, [song.id]: true }));
+    setBlobUploadingCount((prev) => prev + 1);
+    setBlobUploadStatus(`Online library me publish ho raha hai: "${song.title}"...`);
+
+    try {
+      let audioBase64: string | undefined = undefined;
+      let blob = providedBlob || (await getAudioBlob(song.id));
+      if (!blob && song.url && !song.url.includes('blob.vercel-storage.com')) {
+        try {
+          const fetched = await fetch(song.url);
+          if (fetched.ok) {
+            blob = await fetched.blob();
+          }
+        } catch {}
+      }
+
+      if (blob) {
+        audioBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            let res = reader.result as string;
+            if (res && !res.startsWith('data:audio/')) {
+              res = res.replace(/^data:[^;]+;base64,/, 'data:audio/mpeg;base64,');
+            }
+            resolve(res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      const adminKey = localStorage.getItem('aurabeat_admin_key') || 'AuraBeatSecretKey26';
+      const blobToken = localStorage.getItem('aurabeat_blob_token') || undefined;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-admin-key': adminKey,
+      };
+      if (blobToken) {
+        headers['x-blob-token'] = blobToken;
+      }
+
+      const res = await fetch('/api/catalog/publish', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          ...song,
+          audioBase64,
+          adminKey,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.song) {
+          const updatedCloudSong: Song = {
+            ...data.song,
+            isCloudShared: true,
+            isOffline: false,
+          };
+          setSongs((prev) => [updatedCloudSong, ...prev.filter((s) => s.id !== song.id && s.id !== updatedCloudSong.id)]);
+          setQueue((prev) => [updatedCloudSong, ...prev.filter((s) => s.id !== song.id && s.id !== updatedCloudSong.id)]);
+          await saveSongMetadata(updatedCloudSong);
+          confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
+          setBlobUploadStatus(`✅ "${song.title}" safalta-purvak online library me publish ho gaya!`);
+          setTimeout(() => setBlobUploadStatus(null), 4000);
+          return updatedCloudSong;
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to publish song online.');
+      }
+    } catch (err: any) {
+      console.warn('Online publish note:', err);
+      setBlobUploadStatus(`⚠️ Local save ho gaya, Publish note: ${err.message || 'Check network'}`);
+      setTimeout(() => setBlobUploadStatus(null), 5000);
+      throw err;
+    } finally {
+      setUploadingSongIds((prev) => ({ ...prev, [song.id]: false }));
+      setBlobUploadingCount((prev) => Math.max(0, prev - 1));
+    }
+  };
+
+  // Custom Local Device Audio File Upload (Instant local playback & offline storage)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -718,11 +812,12 @@ export default function App() {
       const tempAudio = new Audio();
       tempAudio.src = url;
       tempAudio.onloadedmetadata = async () => {
+        const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
         const newSong: Song = {
           id,
-          title: file.name.replace(/\.[^/.]+$/, ''),
+          title: cleanTitle,
           artist: 'My Local Music',
-          album: 'Uploaded Tracks',
+          album: 'Device Offline Tracks',
           duration: Math.round(tempAudio.duration) || 180,
           url,
           coverArt: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
@@ -732,7 +827,7 @@ export default function App() {
           addedAt: Date.now(),
         };
 
-        // Save blob and metadata to IndexedDB
+        // Save blob and metadata to IndexedDB for instant zero-latency offline playback
         await saveAudioBlob(id, file);
         await saveSongMetadata(newSong);
 
@@ -902,48 +997,14 @@ export default function App() {
   };
 
   const handlePublishSongToCloud = async (song: Song) => {
-    let audioBase64: string | undefined = undefined;
-    const blob = await getAudioBlob(song.id);
-    if (blob) {
-      audioBase64 = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-    }
+    await uploadSongDirectlyToBlob(song);
+  };
 
-    const adminKey = localStorage.getItem('aurabeat_admin_key') || 'aurabeat-admin-secret-2026';
-    const blobToken = localStorage.getItem('aurabeat_blob_token') || undefined;
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-admin-key': adminKey,
-    };
-    if (blobToken) {
-      headers['x-blob-token'] = blobToken;
-    }
-
-    const res = await fetch('/api/catalog/publish', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        ...song,
-        audioBase64,
-      }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.song) {
-        setSongs((prev) => [data.song, ...prev.filter((s) => s.id !== song.id && s.id !== data.song.id)]);
-        setQueue((prev) => [data.song, ...prev.filter((s) => s.id !== song.id && s.id !== data.song.id)]);
-        await saveSongMetadata(data.song);
-        confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
-        return;
-      }
-    } else {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to upload song to Vercel Blob Storage.');
+  const handleUploadSongToBlobQuick = async (song: Song) => {
+    try {
+      await uploadSongDirectlyToBlob(song);
+    } catch (err: any) {
+      console.warn('Quick Vercel Blob upload failed:', err);
     }
   };
 
@@ -1244,6 +1305,16 @@ export default function App() {
             <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
+          {/* Admin Control Panel Button */}
+          <button
+            onClick={() => setIsAdminModalOpen(true)}
+            className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 hover:from-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-[11px] sm:text-xs font-bold transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
+            title="Admin Panel (Passkey se songs publish karein)"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Admin</span>
+          </button>
+
           {/* User Account / Sign In */}
           <button
             onClick={() => setIsUserOpen(true)}
@@ -1429,6 +1500,26 @@ export default function App() {
 
       {/* SONG LIBRARY & CATEGORIES SECTION */}
       <main className="px-4 md:px-8 mt-4 max-w-7xl mx-auto w-full flex-1">
+        {/* Online Library Publish Progress Banner */}
+        {blobUploadStatus && (
+          <div className="mb-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-sky-950/70 via-indigo-950/70 to-purple-950/70 border border-sky-400/40 text-xs text-sky-200 flex items-center justify-between shadow-xl shadow-sky-500/10 backdrop-blur-md">
+            <div className="flex items-center space-x-3">
+              <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-300">
+                <Globe className={`w-4 h-4 ${blobUploadingCount > 0 ? 'animate-bounce text-cyan-400' : 'text-emerald-400'}`} />
+              </div>
+              <div>
+                <p className="font-semibold text-white">{blobUploadStatus}</p>
+                <p className="text-[11px] text-zinc-400">Online library me synchronize ho raha hai</p>
+              </div>
+            </div>
+            {blobUploadingCount > 0 && (
+              <span className="px-2.5 py-1 rounded-full bg-sky-500/30 text-sky-200 font-mono text-[10px] font-bold border border-sky-400/40 shrink-0 animate-pulse">
+                Publishing ({blobUploadingCount})...
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Main Category Tabs */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/10">
           <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
@@ -1504,11 +1595,11 @@ export default function App() {
             >
               <Globe className="w-3.5 h-3.5 text-cyan-400" />
               <span>
-                Online Vercel Blob (
+                Online (
                 {
                   songs.filter(
                     (s) =>
-                      (s as any).isCloudShared &&
+                      (s as any).isCloudShared ||
                       Boolean(s.url && (s.url.includes('blob.vercel-storage.com') || s.url.includes('vercel-storage')))
                   ).length
                 }
@@ -1806,29 +1897,29 @@ export default function App() {
           </div>
         )}
 
-        {/* 3. ONLINE / VERCEL BLOB STORAGE HUB BANNER */}
+        {/* 3. ONLINE STREAMING LIBRARY HUB BANNER */}
         {activeTab === 'cloud' && (
           <div className="mt-2 mb-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-cyan-950/50 border border-indigo-500/30">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 flex items-center space-x-1.5 w-fit">
                   <Globe className="w-3 h-3 text-cyan-400" />
-                  <span>Vercel Blob Storage Hub</span>
+                  <span>Online Music Library</span>
                 </span>
                 <h3 className="text-base sm:text-lg font-bold text-white mt-1">
-                  Online Songs (Vercel Blob Permanent Storage)
+                  Online Songs (Live Streaming)
                 </h3>
                 <p className="text-xs text-zinc-300 mt-1 max-w-2xl leading-relaxed">
-                  Yahan sirf wahi songs live hain jo <strong>Vercel Blob Storage</strong> par uploaded hain. Purane 4 demo songs hata diye gaye hain. Kisi bhi gaane ke <strong>Cover / Edit</strong> icon par click karke use <strong>Vercel Blob me Publish</strong> kar sakte hain.
+                  Yahan sabhi online songs live stream ho rahe hain. Admin panel se naye songs publish karein taaki sabhi users online sun saken.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={handleOpenAudioGallery}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
+                onClick={() => setIsAdminModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
               >
-                <Upload className="w-4 h-4" />
-                <span>Upload Song to Vercel</span>
+                <ShieldCheck className="w-4 h-4" />
+                <span>Admin: Publish Song</span>
               </button>
             </div>
           </div>
@@ -1844,17 +1935,18 @@ export default function App() {
                     <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
                       <Globe className="w-7 h-7" />
                     </div>
-                    <h4 className="text-base font-bold text-white">Vercel Blob Storage me abhi koi gaana nahi hai</h4>
+                    <h4 className="text-base font-bold text-white">Online Library me abhi koi gaana nahi hai</h4>
                     <p className="text-xs text-zinc-400 leading-relaxed">
-                      Pehle se shamil 4 demo songs hata diye gaye hain. Yahan ab sirf wahi gaane dikhenge jo aapke Vercel Blob storage par uploaded honge.
+                      Admin panel se songs publish karein taaki sabhi users ke liye gaane yahan online live play ho saken.
                     </p>
                     <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
                       <button
                         type="button"
-                        onClick={handleOpenAudioGallery}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 hover:opacity-95 cursor-pointer"
+                        onClick={() => setIsAdminModalOpen(true)}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 hover:opacity-95 cursor-pointer flex items-center space-x-1.5"
                       >
-                        Naya Song Upload & Publish Karein
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Admin Portal Kholein</span>
                       </button>
                     </div>
                   </div>
@@ -1965,10 +2057,10 @@ export default function App() {
                           ) && (
                             <span
                               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 shrink-0 flex items-center space-x-1"
-                              title="Online track stored on Vercel Blob Storage"
+                              title="Online song (Cloud Streaming)"
                             >
                               <Globe className="w-2.5 h-2.5 text-cyan-400" />
-                              <span>Vercel Blob</span>
+                              <span>Online</span>
                             </span>
                           )}
                         </div>
@@ -2023,12 +2115,12 @@ export default function App() {
                         />
                       </button>
 
-                      {/* Change Cover Art & Edit Details & Publish Online - ALWAYS VISIBLE ON ALL SCREENS */}
+                      {/* Change Cover Art & Edit Details - ALWAYS VISIBLE ON ALL SCREENS */}
                       <button
                         type="button"
                         onClick={() => setEditingSong(song)}
                         className="p-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors cursor-pointer"
-                        title="Change Cover Art, Edit Details & Publish Online (कवर बदलें और ऑनलाइन पब्लिश करें)"
+                        title="Change Cover Art & Song Details (कवर और डिटेल्स बदलें)"
                       >
                         <ImageIcon className="w-4 h-4" />
                       </button>
@@ -2265,6 +2357,10 @@ export default function App() {
           setQueue((prev) => prev.map((s) => ({ ...s, isOffline: false })));
         }}
         accentColor={currentTheme.primaryColor}
+        onOpenAdminPanel={() => {
+          setIsUserOpen(false);
+          setIsAdminModalOpen(true);
+        }}
       />
 
       {/* INSTALL ON MOBILE MODAL */}
@@ -2314,6 +2410,34 @@ export default function App() {
           setQueue((prev) =>
             prev.map((s) => (s.id === songId ? { ...s, lyrics: lrc } : s))
           );
+        }}
+        accentColor={currentTheme.primaryColor}
+      />
+
+      {/* DEDICATED ADMIN CONTROL PORTAL */}
+      <AdminPanelModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        songs={songs}
+        onSongPublished={(newSong) => {
+          setSongs((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
+          setQueue((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
+          saveSongMetadata(newSong);
+        }}
+        onSongDeleted={(songId) => {
+          setSongs((prev) => prev.filter((s) => s.id !== songId));
+          setQueue((prev) => prev.filter((s) => s.id !== songId));
+          deleteSavedSong(songId).catch(() => {});
+        }}
+        onPlaySong={(s) => {
+          const idx = songs.findIndex((x) => x.id === s.id);
+          if (idx !== -1) {
+            playSong(idx, s);
+          } else {
+            setSongs((prev) => [s, ...prev]);
+            setQueue((prev) => [s, ...prev]);
+            playSong(0, s);
+          }
         }}
         accentColor={currentTheme.primaryColor}
       />

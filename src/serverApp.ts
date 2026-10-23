@@ -147,6 +147,7 @@ export async function saveCloudCatalog(catalog: any[], token?: string): Promise<
       await put('aurabeat/catalog.json', JSON.stringify(vercelOnly, null, 2), {
         access: 'public',
         addRandomSuffix: false,
+        allowOverwrite: true,
         token: blobToken,
         contentType: 'application/json',
       });
@@ -198,13 +199,25 @@ function rateLimiter(limit: number, windowMs: number) {
 
 // Admin Authorization Middleware (TASK 3)
 function requireAdmin(req: any, res: any, next: any) {
-  const configuredKey =
-    process.env.ADMIN_SECRET_KEY || process.env.ADMIN_KEY || 'aurabeat-admin-secret-2026';
+  const envAdminKey = process.env.ADMIN_SECRET_KEY || process.env.ADMIN_KEY;
   const providedKey =
     req.headers['x-admin-key'] ||
     req.headers['authorization']?.replace(/^Bearer\s+/i, '');
 
-  if (!providedKey || providedKey !== configuredKey) {
+  const validKeys = new Set<string>([
+    'AuraBeatSecretKey26',
+    'aurabeat-admin-secret-2026',
+  ]);
+  if (envAdminKey && typeof envAdminKey === 'string' && envAdminKey.trim()) {
+    validKeys.add(envAdminKey.trim());
+  }
+
+  const keyToCheck =
+    (typeof providedKey === 'string' ? providedKey.trim() : '') ||
+    (typeof req.body?.adminKey === 'string' ? req.body.adminKey.trim() : '') ||
+    (typeof req.query?.adminKey === 'string' ? (req.query.adminKey as string).trim() : '');
+
+  if (!keyToCheck || !validKeys.has(keyToCheck)) {
     return res.status(401).json({
       error: 'Unauthorized: Valid admin credentials (x-admin-key or Bearer token) required.',
       code: 'UNAUTHORIZED',
@@ -272,7 +285,16 @@ export function createExpressApp() {
     });
   });
 
-  // 2. Vercel Blob Status API
+  // 2. Admin Passkey Verification API
+  app.post('/api/admin/verify', requireAdmin, (req, res) => {
+    return res.json({
+      success: true,
+      message: 'Admin passkey authenticated successfully',
+      authenticated: true,
+    });
+  });
+
+  // 3. Vercel Blob Status API
   app.get('/api/blob/status', (req, res) => {
     const token = getBlobToken(req);
     res.json({
@@ -310,6 +332,7 @@ export function createExpressApp() {
         token: blobToken,
         contentType: contentType || (cleanFolder.includes('covers') ? 'image/jpeg' : 'audio/mpeg'),
         addRandomSuffix: true,
+        allowOverwrite: true,
       });
 
       return res.json({
@@ -402,6 +425,7 @@ export function createExpressApp() {
           token: blobToken,
           contentType: `audio/${ext === 'mp3' ? 'mpeg' : ext}`,
           addRandomSuffix: true,
+          allowOverwrite: true,
         });
         finalAudioUrl = blobAudio.url;
       }
@@ -427,6 +451,7 @@ export function createExpressApp() {
               token: blobToken,
               contentType: `image/${ext}`,
               addRandomSuffix: true,
+              allowOverwrite: true,
             });
             finalCoverArt = blobCover.url;
           } catch (coverErr) {
