@@ -37,9 +37,14 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
   const [title, setTitle] = useState(song.title);
   const [artist, setArtist] = useState(song.artist);
   const [album, setAlbum] = useState(song.album || '');
-  const [coverArt, setCoverArt] = useState(song.coverArt);
+  const [coverArt, setCoverArt] = useState(song.coverArt || '/logo.png');
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedSuccess, setPublishedSuccess] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [showVercelConfig, setShowVercelConfig] = useState(false);
+  const [blobTokenInput, setBlobTokenInput] = useState(
+    () => localStorage.getItem('aurabeat_blob_token') || ''
+  );
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,7 +73,13 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
 
   const handlePublishOnline = async () => {
     if (!onPublishToCloud) return;
+    setPublishError(null);
     setIsPublishing(true);
+
+    if (blobTokenInput.trim()) {
+      localStorage.setItem('aurabeat_blob_token', blobTokenInput.trim());
+    }
+
     try {
       const updated: Song = {
         ...song,
@@ -84,8 +95,12 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
         onSave(updated);
         onClose();
       }, 1500);
-    } catch (e) {
-      alert('Failed to publish song online');
+    } catch (e: any) {
+      console.error('Publish to Vercel Blob failed:', e);
+      setPublishError(
+        e?.message ||
+          'Failed to upload song to Vercel Blob Storage. Ensure BLOB_READ_WRITE_TOKEN is configured.'
+      );
     } finally {
       setIsPublishing(false);
     }
@@ -199,40 +214,79 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
             </div>
           </div>
 
-          {/* Publish to Cloud Catalog Section (Creator Feature) */}
+          {/* Publish to Vercel Blob Storage Section */}
           <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-zinc-950 to-cyan-950/30 border border-indigo-500/30 space-y-2">
-            <div className="flex items-center space-x-2">
-              <Globe className="w-4 h-4 text-cyan-400" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                Public Online Catalog me Publish Karein
-              </h4>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Globe className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Vercel Blob Storage me Publish Karein
+                </h4>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                Vercel CDN
+              </span>
             </div>
             <p className="text-[11px] text-zinc-300 leading-relaxed">
-              Jab aap is gaane ko <strong>Public Catalog</strong> me publish karenge, to duniya me koi bhi user jab ye app open karega, to usko aapka gaana bina download kiye online play karne ko milega!
+              Jab aap is gaane ko <strong>Vercel Blob Storage</strong> me publish karenge, to ye song permanent cloud CDN par save hoga aur AuraBeat ke Online tab me sabhi users ke liye instantly play hoga!
             </p>
+
+            {publishError && (
+              <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-200 text-xs">
+                ⚠️ {publishError}
+              </div>
+            )}
 
             <button
               onClick={handlePublishOnline}
               disabled={isPublishing || publishedSuccess}
-              className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
             >
               {isPublishing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Cloud me Publish Ho Raha Hai...</span>
+                  <span>Vercel Blob Storage me Upload Ho Raha Hai...</span>
                 </>
               ) : publishedSuccess ? (
                 <>
                   <Check className="w-4 h-4 text-emerald-300" />
-                  <span>Sabhi Users ke liye Publish Ho Gaya!</span>
+                  <span>Vercel Blob me Successfully Save Ho Gaya!</span>
                 </>
               ) : (
                 <>
                   <Globe className="w-4 h-4" />
-                  <span>Publish for All Users (Online Play)</span>
+                  <span>Publish to Vercel Blob Storage (Online Play)</span>
                 </>
               )}
             </button>
+
+            {/* Optional Vercel Token Config toggle */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowVercelConfig(!showVercelConfig)}
+                className="text-[10px] text-zinc-400 hover:text-cyan-400 transition-colors flex items-center space-x-1"
+              >
+                <span>⚙️ {showVercelConfig ? 'Hide' : 'Configure'} Vercel Blob Token (Optional)</span>
+              </button>
+              {showVercelConfig && (
+                <div className="mt-2 p-2.5 rounded-lg bg-black/60 border border-white/10 space-y-1.5 animate-in fade-in">
+                  <label className="text-[10px] text-zinc-400 block font-mono">
+                    BLOB_READ_WRITE_TOKEN:
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="vercel_blob_rw_..."
+                    value={blobTokenInput}
+                    onChange={(e) => setBlobTokenInput(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-white/10 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500"
+                  />
+                  <p className="text-[9px] text-zinc-500">
+                    Vercel project environment me token set hone par yahan daalne ki zaroorat nahi hai.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

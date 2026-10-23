@@ -1,55 +1,6 @@
 import { Song } from '../types';
 
-export const DEFAULT_SONGS: Song[] = [
-  {
-    id: 'track-demo-1',
-    title: 'Neon Horizon',
-    artist: 'CyberPulse',
-    album: 'Retrowave Odyssey',
-    duration: 372,
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-    genre: 'Synthwave',
-    isCloudShared: true,
-    addedAt: 1792400000000,
-  },
-  {
-    id: 'track-demo-2',
-    title: 'Hyper Bass Overdrive',
-    artist: 'Voltage 300',
-    album: 'Peak Limiters',
-    duration: 423,
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
-    genre: 'EDM / Club',
-    isCloudShared: true,
-    addedAt: 1792390000000,
-  },
-  {
-    id: 'track-demo-3',
-    title: 'Cosmic Bass Odyssey',
-    artist: 'Aura Collective',
-    album: 'Infinite Echoes',
-    duration: 312,
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
-    genre: 'Synthwave / Bass',
-    isCloudShared: true,
-    addedAt: 1792380000000,
-  },
-  {
-    id: 'track-demo-4',
-    title: 'Midnight Resonance',
-    artist: 'Echo Shift',
-    album: 'Midnight Pulse',
-    duration: 345,
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&auto=format&fit=crop&q=80',
-    genre: 'Lo-Fi / Chill',
-    isCloudShared: true,
-    addedAt: 1792370000000,
-  },
-];
+export const DEFAULT_SONGS: Song[] = [];
 
 export const PRESET_THEMES = [
   {

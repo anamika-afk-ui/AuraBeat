@@ -170,15 +170,27 @@ export default function App() {
         const savedSongs = await getAllSavedSongs();
         const map = new Map<string, Song>();
 
-        // 1. Built-in default tracks
+        // 1. Built-in default tracks (demo songs removed per user request)
         DEFAULT_SONGS.forEach((s) => map.set(s.id, s));
 
-        // 2. Creator published songs bundled directly into client build for Vercel
+        // 2. Creator published songs bundled directly into client build (now empty)
         BUNDLED_PUBLISHED_SONGS.forEach((s) => map.set(s.id, s));
 
-        // 3. User local uploads saved in IndexedDB (re-create active blob URLs)
+        // 3. User local uploads saved in IndexedDB (clean up old legacy demo songs if present)
         if (savedSongs && savedSongs.length > 0) {
           for (const s of savedSongs) {
+            // Discard removed demo songs
+            if (
+              s.id.startsWith('track-demo-') ||
+              s.id.startsWith('verified_synth_') ||
+              s.id.startsWith('verified_bass_') ||
+              s.id.startsWith('verified_cosmic_') ||
+              s.id.startsWith('verified_chill_') ||
+              (s.url && s.url.includes('soundhelix.com'))
+            ) {
+              await deleteSavedSong(s.id).catch(() => {});
+              continue;
+            }
             try {
               const blob = await getAudioBlob(s.id);
               if (blob) {
@@ -189,36 +201,36 @@ export default function App() {
           }
         }
 
-        // 4. Fetch dynamic online cloud songs (checks /api/catalog/songs first, then /cloudCatalog.json for Vercel)
+        // 4. Fetch dynamic online cloud songs strictly hosted on Vercel Blob Storage
         try {
           let catalogSongs: Song[] = [];
 
-          // Try server API first
           try {
             const res = await fetch('/api/catalog/songs');
             if (res.ok) {
               const data = await res.json();
               if (data.songs && Array.isArray(data.songs)) {
-                catalogSongs = data.songs;
+                catalogSongs = data.songs.filter((s: Song) =>
+                  s && s.url && (s.url.includes('blob.vercel-storage.com') || s.url.includes('vercel-storage'))
+                );
               }
             }
           } catch {
-            // API not available on static hosting like Vercel
+            // API not available
           }
 
-          // Fallback to static public/cloudCatalog.json (served by Vercel/Netlify static hosts)
           if (catalogSongs.length === 0) {
             try {
               const staticRes = await fetch('/cloudCatalog.json');
               if (staticRes.ok) {
                 const staticData = await staticRes.json();
                 if (Array.isArray(staticData)) {
-                  catalogSongs = staticData;
+                  catalogSongs = staticData.filter((s: Song) =>
+                    s && s.url && (s.url.includes('blob.vercel-storage.com') || s.url.includes('vercel-storage'))
+                  );
                 }
               }
-            } catch {
-              // Static file not reachable
-            }
+            } catch {}
           }
 
           if (catalogSongs.length > 0) {
@@ -900,36 +912,39 @@ export default function App() {
       });
     }
 
-    try {
-      const res = await fetch('/api/catalog/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...song,
-          audioBase64,
-        }),
-      });
+    const adminKey = localStorage.getItem('aurabeat_admin_key') || 'aurabeat-admin-secret-2026';
+    const blobToken = localStorage.getItem('aurabeat_blob_token') || undefined;
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.song) {
-          setSongs((prev) => prev.map((s) => (s.id === song.id ? data.song : s)));
-          setQueue((prev) => prev.map((s) => (s.id === song.id ? data.song : s)));
-          await saveSongMetadata(data.song);
-          confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('Backend publish API not reachable (Vercel static mode), updating local state:', e);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey,
+    };
+    if (blobToken) {
+      headers['x-blob-token'] = blobToken;
     }
 
-    // Fallback for Vercel static deployments
-    const updated: Song = { ...song, isCloudShared: true };
-    await saveSongMetadata(updated);
-    setSongs((prev) => prev.map((s) => (s.id === song.id ? updated : s)));
-    setQueue((prev) => prev.map((s) => (s.id === song.id ? updated : s)));
-    confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
+    const res = await fetch('/api/catalog/publish', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...song,
+        audioBase64,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.song) {
+        setSongs((prev) => [data.song, ...prev.filter((s) => s.id !== song.id && s.id !== data.song.id)]);
+        setQueue((prev) => [data.song, ...prev.filter((s) => s.id !== song.id && s.id !== data.song.id)]);
+        await saveSongMetadata(data.song);
+        confetti({ particleCount: 35, spread: 70, origin: { y: 0.7 } });
+        return;
+      }
+    } else {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to upload song to Vercel Blob Storage.');
+    }
   };
 
   // Queue reordering (Aage / Pichhe)
@@ -1054,7 +1069,12 @@ export default function App() {
 
     if (activeTab === 'favorites') return !!s.isFavorite;
     if (activeTab === 'offline') return !!s.isOffline;
-    if (activeTab === 'cloud') return !!(s as any).isCloudShared;
+    if (activeTab === 'cloud') {
+      return (
+        !!(s as any).isCloudShared &&
+        Boolean(s.url && (s.url.includes('blob.vercel-storage.com') || s.url.includes('vercel-storage')))
+      );
+    }
     if (selectedArtist) return s.artist === selectedArtist;
     return true;
   });
@@ -1142,13 +1162,12 @@ export default function App() {
       <header className="sticky top-0 z-30 w-full max-w-full overflow-x-hidden px-3 sm:px-4 md:px-8 py-2.5 sm:py-3.5 bg-black/50 backdrop-blur-xl border-b border-white/10 flex items-center justify-between gap-2">
         {/* Logo & Brand */}
         <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-          <div
-            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0"
-            style={{
-              background: `linear-gradient(135deg, ${currentTheme.primaryColor}, ${currentTheme.accentColor})`,
-            }}
-          >
-            <Disc className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-spin [animation-duration:8s]" />
+          <div className="relative group shrink-0">
+            <img
+              src="/logo.png"
+              alt="AuraBeat Logo"
+              className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl object-cover shadow-lg shadow-cyan-500/25 border border-white/10 ring-1 ring-cyan-400/30 transition-transform group-hover:scale-105"
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-1.5 sm:space-x-2">
@@ -1483,8 +1502,18 @@ export default function App() {
                   : 'bg-zinc-800/80 text-zinc-300 hover:text-white'
               }`}
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Online / Creator Songs ({songs.filter((s) => (s as any).isCloudShared).length})</span>
+              <Globe className="w-3.5 h-3.5 text-cyan-400" />
+              <span>
+                Online Vercel Blob (
+                {
+                  songs.filter(
+                    (s) =>
+                      (s as any).isCloudShared &&
+                      Boolean(s.url && (s.url.includes('blob.vercel-storage.com') || s.url.includes('vercel-storage')))
+                  ).length
+                }
+                )
+              </span>
             </button>
 
             <button
@@ -1777,19 +1806,20 @@ export default function App() {
           </div>
         )}
 
-        {/* 3. ONLINE / CREATOR DISTRIBUTION HUB BANNER */}
+        {/* 3. ONLINE / VERCEL BLOB STORAGE HUB BANNER */}
         {activeTab === 'cloud' && (
           <div className="mt-2 mb-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-cyan-950/50 border border-indigo-500/30">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-500/40">
-                  Creator Online Songs Hub
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 flex items-center space-x-1.5 w-fit">
+                  <Globe className="w-3 h-3 text-cyan-400" />
+                  <span>Vercel Blob Storage Hub</span>
                 </span>
                 <h3 className="text-base sm:text-lg font-bold text-white mt-1">
-                  Users ko Direct Apne Songs Online Kaise Sunayein?
+                  Online Songs (Vercel Blob Permanent Storage)
                 </h3>
                 <p className="text-xs text-zinc-300 mt-1 max-w-2xl leading-relaxed">
-                  Ye gaane server cloud catalog me live hain. Jab bhi koi bhi user iss app ko open karega, to usko ye gaane yahan <strong>bina kisi upload ya download ke directly online stream</strong> karne ko milenge! Aap bhi kisi bhi gaane ke <strong>Cover / Edit</strong> icon par click karke use <strong>Publish for All Users</strong> kar sakte hain.
+                  Yahan sirf wahi songs live hain jo <strong>Vercel Blob Storage</strong> par uploaded hain. Purane 4 demo songs hata diye gaye hain. Kisi bhi gaane ke <strong>Cover / Edit</strong> icon par click karke use <strong>Vercel Blob me Publish</strong> kar sakte hain.
                 </p>
               </div>
               <button
@@ -1798,7 +1828,7 @@ export default function App() {
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
               >
                 <Upload className="w-4 h-4" />
-                <span>Upload & Publish Track</span>
+                <span>Upload Song to Vercel</span>
               </button>
             </div>
           </div>
@@ -1808,12 +1838,35 @@ export default function App() {
         {activeTab !== 'playlists' && (activeTab !== 'artists' || selectedArtist) && (
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {sortedSongs.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-zinc-500">
-                <Music className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <h4 className="text-sm font-semibold text-zinc-400">No tracks found</h4>
-                <p className="text-xs text-zinc-500 mt-1">
-                  Upload audio files from device gallery or download online tracks!
-                </p>
+              <div className="col-span-full py-12 text-center text-zinc-500">
+                {activeTab === 'cloud' ? (
+                  <div className="max-w-md mx-auto p-6 rounded-3xl bg-zinc-900/60 border border-white/10 backdrop-blur-md text-center space-y-3">
+                    <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                      <Globe className="w-7 h-7" />
+                    </div>
+                    <h4 className="text-base font-bold text-white">Vercel Blob Storage me abhi koi gaana nahi hai</h4>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      Pehle se shamil 4 demo songs hata diye gaye hain. Yahan ab sirf wahi gaane dikhenge jo aapke Vercel Blob storage par uploaded honge.
+                    </p>
+                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleOpenAudioGallery}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 hover:opacity-95 cursor-pointer"
+                      >
+                        Naya Song Upload & Publish Karein
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <Music className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                    <h4 className="text-sm font-semibold text-zinc-400">No tracks found</h4>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Upload audio files from device gallery or scan your phone music!
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               sortedSongs.map((song, idx) => {
@@ -1856,8 +1909,11 @@ export default function App() {
                       {/* Cover Art with quick Edit Cover overlay */}
                       <div className="relative shrink-0 group/cover">
                         <img
-                          src={song.coverArt}
+                          src={song.coverArt || '/logo.png'}
                           alt={song.title}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                          }}
                           className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl object-cover"
                         />
                         <div
@@ -1901,12 +1957,18 @@ export default function App() {
                               title="Offline Ready"
                             />
                           )}
-                          {(song as any).isCloudShared && (
+                          {Boolean(
+                            (song as any).isCloudShared ||
+                              (song.url &&
+                                (song.url.includes('blob.vercel-storage.com') ||
+                                  song.url.includes('vercel-storage')))
+                          ) && (
                             <span
-                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 shrink-0"
-                              title="Online Public Track"
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 shrink-0 flex items-center space-x-1"
+                              title="Online track stored on Vercel Blob Storage"
                             >
-                              Online
+                              <Globe className="w-2.5 h-2.5 text-cyan-400" />
+                              <span>Vercel Blob</span>
                             </span>
                           )}
                         </div>

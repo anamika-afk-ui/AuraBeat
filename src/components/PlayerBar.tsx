@@ -83,8 +83,11 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
         >
           <div className="relative shrink-0">
             <img
-              src={currentSong.coverArt}
+              src={currentSong.coverArt || '/logo.png'}
               alt={currentSong.title}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/logo.png';
+              }}
               className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover shadow-md transition-transform group-hover:scale-105 ${
                 isPlaying ? 'ring-2 ring-cyan-400/50' : ''
               }`}

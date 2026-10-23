@@ -376,9 +376,11 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         {/* Top Header */}
         <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10">
           <div className="flex items-center space-x-2.5">
-            <div className="p-2 sm:p-2.5 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-500 shadow-lg shadow-cyan-500/20">
-              <User className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="AuraBeat Logo"
+              className="w-10 h-10 rounded-2xl object-cover shadow-lg shadow-cyan-500/20 border border-white/10 shrink-0"
+            />
             <div>
               <h2 className="text-base sm:text-lg font-bold tracking-tight">
                 {tab === 'profile' ? 'User Profile & Cloud' : 'Account Login & Sign Up'}

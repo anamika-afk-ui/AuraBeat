@@ -266,9 +266,11 @@ export const ListenTogetherModal: React.FC<ListenTogetherModalProps> = ({
         {/* Top Header */}
         <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/20">
-              <Radio className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="AuraBeat Logo"
+              className="w-11 h-11 rounded-2xl object-cover shadow-lg shadow-cyan-500/20 border border-white/10 shrink-0"
+            />
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-lg sm:text-xl font-bold tracking-tight">Party Sync & Dual Device</h2>

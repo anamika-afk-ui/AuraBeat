@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { put, list, del } from '@vercel/blob';
 
 dotenv.config();
 
@@ -35,109 +36,121 @@ if (process.env.GEMINI_API_KEY) {
 // In-memory catalog cache for serverless resiliency
 let inMemoryCatalog: any[] | null = null;
 
-// Verified royalty-free fallback catalog with accurate artist/title/durations
-export const VERIFIED_SEED_CATALOG = [
-  {
-    id: 'verified_synth_1',
-    title: 'Neon Horizon',
-    artist: 'CyberPulse',
-    album: 'Retrowave Odyssey',
-    duration: 372,
-    genre: 'Synthwave',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-    isCloudShared: true,
-    addedAt: 1792400000000,
-  },
-  {
-    id: 'verified_bass_2',
-    title: 'Hyper Bass Overdrive',
-    artist: 'Voltage 300',
-    album: 'Peak Limiters',
-    duration: 423,
-    genre: 'EDM / Club',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
-    isCloudShared: true,
-    addedAt: 1792390000000,
-  },
-  {
-    id: 'verified_cosmic_3',
-    title: 'Cosmic Bass Odyssey',
-    artist: 'Aura Collective',
-    album: 'Infinite Echoes',
-    duration: 312,
-    genre: 'Synthwave / Bass',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
-    isCloudShared: true,
-    addedAt: 1792380000000,
-  },
-  {
-    id: 'verified_chill_4',
-    title: 'Midnight Resonance',
-    artist: 'Echo Shift',
-    album: 'Midnight Pulse',
-    duration: 345,
-    genre: 'Lo-Fi / Chill',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
-    coverArt: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&auto=format&fit=crop&q=80',
-    isCloudShared: true,
-    addedAt: 1792370000000,
-  },
-];
+// Empty seed catalog - demo songs removed per user request.
+// Only songs stored on Vercel Blob storage will be populated dynamically.
+export const VERIFIED_SEED_CATALOG: any[] = [];
 
-export function getCloudCatalog(): any[] {
-  if (inMemoryCatalog && inMemoryCatalog.length > 0) {
-    return inMemoryCatalog;
+/**
+ * Helper to retrieve Vercel Blob Read/Write token from request headers or environment variables.
+ */
+export function getBlobToken(req?: any): string | undefined {
+  const token =
+    req?.headers?.['x-blob-token'] ||
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
+  return typeof token === 'string' && token.trim().length > 0 ? token.trim() : undefined;
+}
+
+/**
+ * Checks if a song URL is hosted on Vercel Blob Storage.
+ */
+export function isVercelBlobUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return url.includes('blob.vercel-storage.com') || url.includes('vercel-storage');
+}
+
+/**
+ * Retrieves the catalog from Vercel Blob storage (or local cache).
+ * Strictly filters to ONLY return tracks hosted on Vercel Blob storage.
+ */
+export async function getCloudCatalog(token?: string): Promise<any[]> {
+  const blobToken = token || getBlobToken();
+
+  // 1. If Vercel Blob token is available, attempt to fetch catalog directly from Vercel Blob
+  if (blobToken) {
+    try {
+      const blobList = await list({ prefix: 'aurabeat/catalog.json', token: blobToken, limit: 1 });
+      if (blobList.blobs && blobList.blobs.length > 0) {
+        const catalogBlobUrl = blobList.blobs[0].url;
+        const res = await fetch(catalogBlobUrl, { cache: 'no-store' });
+        if (res.ok) {
+          const parsed = await res.json();
+          if (Array.isArray(parsed)) {
+            const vercelOnly = parsed.filter((s: any) => s && isVercelBlobUrl(s.url));
+            inMemoryCatalog = vercelOnly;
+            return vercelOnly;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Vercel Blob catalog fetch error:', err);
+    }
   }
+
+  // 2. Return in-memory if already populated with vercel storage tracks
+  if (inMemoryCatalog !== null) {
+    return inMemoryCatalog.filter((s: any) => s && isVercelBlobUrl(s.url));
+  }
+
+  // 3. Fallback to local files only if they contain valid vercel storage songs
   const candidatePaths = [PUBLIC_CATALOG_FILE, ROOT_CATALOG_FILE, TMP_CATALOG_FILE];
   for (const p of candidatePaths) {
     try {
       if (fs.existsSync(p)) {
         const content = fs.readFileSync(p, 'utf-8');
         const parsed = JSON.parse(content);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filter out broken placeholder /uploads references that do not exist
-          const valid = parsed.filter((s: any) => {
-            if (!s.url) return false;
-            if (s.url.startsWith('/uploads/')) {
-              const localPath = path.join(UPLOADS_DIR, path.basename(s.url));
-              return fs.existsSync(localPath);
-            }
-            return true;
-          });
-          inMemoryCatalog = valid.length > 0 ? valid : [...VERIFIED_SEED_CATALOG];
-          return inMemoryCatalog;
+        if (Array.isArray(parsed)) {
+          const vercelTracks = parsed.filter((s: any) => s && isVercelBlobUrl(s.url));
+          inMemoryCatalog = vercelTracks;
+          return vercelTracks;
         }
       }
     } catch {
-      // Ignore and try next
+      // Continue
     }
   }
-  inMemoryCatalog = [...VERIFIED_SEED_CATALOG];
-  return inMemoryCatalog;
+
+  inMemoryCatalog = [];
+  return [];
 }
 
-export function saveCloudCatalog(catalog: any[]): boolean {
-  inMemoryCatalog = catalog;
-  const data = JSON.stringify(catalog, null, 2);
-  let saved = false;
+/**
+ * Persists the catalog to Vercel Blob storage and local files.
+ * Ensures only tracks with Vercel Blob URLs are saved.
+ */
+export async function saveCloudCatalog(catalog: any[], token?: string): Promise<boolean> {
+  const vercelOnly = catalog.filter((s: any) => s && isVercelBlobUrl(s.url));
+  inMemoryCatalog = vercelOnly;
 
+  const blobToken = token || getBlobToken();
+  let savedToBlob = false;
+
+  if (blobToken) {
+    try {
+      await put('aurabeat/catalog.json', JSON.stringify(vercelOnly, null, 2), {
+        access: 'public',
+        addRandomSuffix: false,
+        token: blobToken,
+        contentType: 'application/json',
+      });
+      savedToBlob = true;
+    } catch (err) {
+      console.warn('Failed to save catalog.json to Vercel Blob:', err);
+    }
+  }
+
+  // Also sync to local files if writable
+  const data = JSON.stringify(vercelOnly, null, 2);
   const candidatePaths = [PUBLIC_CATALOG_FILE, ROOT_CATALOG_FILE, TMP_CATALOG_FILE];
   for (const p of candidatePaths) {
     try {
       const dir = path.dirname(p);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(p, data, 'utf-8');
-      saved = true;
-    } catch {
-      // In serverless, filesystem outside /tmp is read-only
-    }
+    } catch {}
   }
-  return saved;
+
+  return savedToBlob;
 }
 
 // In-memory rate limiting map
@@ -203,7 +216,7 @@ export function createExpressApp() {
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-key, Accept-Ranges, Range');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-key, x-blob-token, Accept-Ranges, Range');
     res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
@@ -226,33 +239,111 @@ export function createExpressApp() {
   }
 
   // 1. Health check endpoint (for Vercel & uptime monitors)
-  app.get('/api/health', (_req, res) => {
+  app.get('/api/health', (req, res) => {
+    const blobToken = getBlobToken(req);
     res.json({
       status: 'ok',
       service: 'AuraBeat Music Backend',
-      version: '2.0.0',
+      version: '3.0.0',
       uptime: process.uptime(),
       timestamp: Date.now(),
       geminiConfigured: !!process.env.GEMINI_API_KEY,
+      storage: {
+        provider: 'vercel-blob',
+        configured: !!blobToken,
+      },
     });
   });
 
-  // 2. Public Catalog: Get all published songs (TASK 2 & TASK 4)
-  app.get('/api/catalog/songs', (_req, res) => {
+  // 2. Vercel Blob Status API
+  app.get('/api/blob/status', (req, res) => {
+    const token = getBlobToken(req);
+    res.json({
+      configured: !!token,
+      provider: 'vercel-blob',
+      message: token
+        ? 'Vercel Blob Storage is connected and ready.'
+        : 'BLOB_READ_WRITE_TOKEN is not configured. Add it in your Vercel project environment variables.',
+    });
+  });
+
+  // 3. Vercel Blob Direct Upload API
+  app.post('/api/blob/upload', rateLimiter(20, 60000), requireAdmin, async (req, res) => {
     try {
-      const catalog = getCloudCatalog();
-      res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
-      return res.json({ songs: catalog });
+      const blobToken = getBlobToken(req);
+      if (!blobToken) {
+        return res.status(400).json({
+          error: 'Vercel Blob token is required. Please set BLOB_READ_WRITE_TOKEN.',
+          code: 'BLOB_TOKEN_MISSING',
+        });
+      }
+
+      const { filename, base64Data, contentType, folder } = req.body;
+      if (!filename || !base64Data) {
+        return res.status(400).json({ error: 'filename and base64Data are required' });
+      }
+
+      const cleanFolder = folder === 'covers' ? 'aurabeat/covers' : 'aurabeat/songs';
+      const cleanFilename = String(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const rawBase64 = String(base64Data).replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(rawBase64, 'base64');
+
+      const blob = await put(`${cleanFolder}/${cleanFilename}`, buffer, {
+        access: 'public',
+        token: blobToken,
+        contentType: contentType || (cleanFolder.includes('covers') ? 'image/jpeg' : 'audio/mpeg'),
+        addRandomSuffix: true,
+      });
+
+      return res.json({
+        success: true,
+        url: blob.url,
+        pathname: blob.pathname,
+        contentType: blob.contentType,
+      });
+    } catch (err: any) {
+      console.error('Vercel Blob upload error:', err);
+      return res.status(500).json({ error: err.message || 'Blob upload failed' });
+    }
+  });
+
+  // 4. Vercel Blob List API
+  app.get('/api/blob/list', async (req, res) => {
+    try {
+      const blobToken = getBlobToken(req);
+      if (!blobToken) {
+        return res.json({ blobs: [], configured: false });
+      }
+      const result = await list({ prefix: 'aurabeat/', token: blobToken });
+      return res.json({ blobs: result.blobs, configured: true });
+    } catch (err: any) {
+      console.error('Vercel Blob list error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to list blobs' });
+    }
+  });
+
+  // 5. Public Catalog: Get all published songs on Vercel Blob Storage
+  app.get('/api/catalog/songs', async (req, res) => {
+    try {
+      const blobToken = getBlobToken(req);
+      const catalog = await getCloudCatalog(blobToken);
+      res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=30');
+      return res.json({
+        songs: catalog,
+        storageProvider: 'vercel-blob',
+        isBlobConfigured: !!blobToken,
+      });
     } catch (err: any) {
       console.error('Error fetching catalog:', err);
       return res.status(500).json({ error: 'Failed to retrieve catalog', code: 'SERVER_ERROR' });
     }
   });
 
-  // 3. Admin: Publish or update song in catalog (TASK 3 & TASK 5)
-  app.post('/api/catalog/publish', rateLimiter(10, 60000), requireAdmin, (req, res) => {
+  // 6. Admin: Publish song directly into Vercel Blob Storage
+  app.post('/api/catalog/publish', rateLimiter(15, 60000), requireAdmin, async (req, res) => {
     try {
       const { id, title, artist, album, duration, genre, coverArt, audioBase64, url } = req.body;
+      const blobToken = getBlobToken(req);
 
       // Validation
       if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -267,63 +358,80 @@ export function createExpressApp() {
 
       const songId = (id && /^[a-zA-Z0-9_\-]+$/.test(id))
         ? id
-        : 'cloud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+        : 'blob_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
 
       let finalAudioUrl = url;
 
-      // If audioBase64 provided, validate and persist if filesystem available
+      // If audioBase64 provided, upload directly to Vercel Blob
       if (audioBase64) {
         if (typeof audioBase64 !== 'string' || !audioBase64.startsWith('data:audio/')) {
           return res.status(400).json({ error: 'Invalid audio base64 payload. Must be data:audio/...' });
         }
-        try {
-          if (!fs.existsSync(UPLOADS_DIR)) {
-            fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-          }
-          const fileName = `song_${songId}.mp3`;
-          const filePath = path.join(UPLOADS_DIR, fileName);
-          const buffer = Buffer.from(audioBase64.replace(/^data:audio\/\w+;base64,/, ''), 'base64');
-          fs.writeFileSync(filePath, buffer);
-          finalAudioUrl = `/uploads/${fileName}`;
-        } catch {
-          // If filesystem is read-only (Vercel serverless), keep base64 or external url
-          finalAudioUrl = audioBase64.length < 5000000 ? audioBase64 : url || '';
+
+        if (!blobToken) {
+          return res.status(400).json({
+            error: 'Vercel Blob Storage token (BLOB_READ_WRITE_TOKEN) is required to store audio online.',
+            code: 'VERCEL_BLOB_TOKEN_REQUIRED',
+          });
         }
+
+        const match = audioBase64.match(/^data:audio\/([a-zA-Z0-9]+);base64,(.*)$/);
+        const ext = match ? (match[1] === 'mpeg' ? 'mp3' : match[1]) : 'mp3';
+        const rawBase64 = match ? match[2] : audioBase64.replace(/^data:audio\/\w+;base64,/, '');
+        const audioBuffer = Buffer.from(rawBase64, 'base64');
+
+        const blobAudio = await put(`aurabeat/songs/${songId}.${ext}`, audioBuffer, {
+          access: 'public',
+          token: blobToken,
+          contentType: `audio/${ext === 'mp3' ? 'mpeg' : ext}`,
+          addRandomSuffix: true,
+        });
+        finalAudioUrl = blobAudio.url;
       }
 
-      if (!finalAudioUrl) {
-        return res.status(400).json({ error: 'Valid audio URL or audioBase64 is required' });
+      if (!finalAudioUrl || !isVercelBlobUrl(finalAudioUrl)) {
+        return res.status(400).json({
+          error: 'Song audio must be stored on Vercel Blob Storage (https://*.public.blob.vercel-storage.com).',
+          code: 'INVALID_VERCEL_BLOB_URL',
+        });
       }
 
-      let finalCoverArt = coverArt || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
+      let finalCoverArt = coverArt || '/logo.png';
       if (coverArt && coverArt.startsWith('data:image')) {
-        try {
-          if (!fs.existsSync(UPLOADS_DIR)) {
-            fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+        const match = coverArt.match(/^data:image\/([a-zA-Z0-9]+);base64,(.*)$/);
+        const ext = match ? match[1] : 'jpg';
+        const rawBase64 = match ? match[2] : coverArt.replace(/^data:image\/\w+;base64,/, '');
+        const coverBuffer = Buffer.from(rawBase64, 'base64');
+
+        if (blobToken) {
+          try {
+            const blobCover = await put(`aurabeat/covers/${songId}.${ext}`, coverBuffer, {
+              access: 'public',
+              token: blobToken,
+              contentType: `image/${ext}`,
+              addRandomSuffix: true,
+            });
+            finalCoverArt = blobCover.url;
+          } catch (coverErr) {
+            console.warn('Cover upload to Vercel Blob failed, using logo fallback:', coverErr);
           }
-          const coverFileName = `cover_${songId}.jpg`;
-          const coverPath = path.join(UPLOADS_DIR, coverFileName);
-          const coverBuffer = Buffer.from(coverArt.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-          fs.writeFileSync(coverPath, coverBuffer);
-          finalCoverArt = `/uploads/${coverFileName}`;
-        } catch {
-          // Serverless fallback
         }
       }
 
-      const catalog = getCloudCatalog();
+      const catalog = await getCloudCatalog(blobToken);
       const existingIdx = catalog.findIndex((s) => s.id === songId);
 
       const songRecord = {
         id: songId,
         title: title.trim(),
         artist: (artist || 'Unknown Artist').trim(),
-        album: (album || 'Public Collection').trim(),
+        album: (album || 'Vercel Blob Collection').trim(),
         duration: typeof duration === 'number' && duration > 0 ? Math.round(duration) : 180,
         genre: (genre || 'Soundtrack').trim(),
         url: finalAudioUrl,
         coverArt: finalCoverArt,
         isCloudShared: true,
+        storageProvider: 'vercel-blob',
         addedAt: Date.now(),
       };
 
@@ -333,47 +441,50 @@ export function createExpressApp() {
         catalog.unshift(songRecord);
       }
 
-      saveCloudCatalog(catalog);
+      await saveCloudCatalog(catalog, blobToken);
       return res.json({ success: true, song: songRecord });
     } catch (err: any) {
       console.error('Publish catalog error:', err);
-      return res.status(500).json({ error: 'Failed to publish song', code: 'SERVER_ERROR' });
+      return res.status(500).json({ error: err.message || 'Failed to publish song to Vercel Blob', code: 'SERVER_ERROR' });
     }
   });
 
-  // 4. Admin: Delete song from catalog & cleanup files (TASK 3)
-  app.delete('/api/catalog/delete/:id', requireAdmin, (req, res) => {
+  // 7. Admin: Delete song from Vercel Blob Storage & cleanup blobs
+  app.delete('/api/catalog/delete/:id', requireAdmin, async (req, res) => {
     try {
       const songId = req.params.id;
       if (!songId || !/^[a-zA-Z0-9_\-]+$/.test(songId)) {
         return res.status(400).json({ error: 'Invalid song ID format' });
       }
 
-      const catalog = getCloudCatalog();
+      const blobToken = getBlobToken(req);
+      const catalog = await getCloudCatalog(blobToken);
+      const target = catalog.find((s: any) => s.id === songId);
       const updated = catalog.filter((s: any) => s.id !== songId);
-      saveCloudCatalog(updated);
+      await saveCloudCatalog(updated, blobToken);
 
-      // Attempt file cleanup safely
-      try {
-        const fileName = `song_${path.basename(songId)}.mp3`;
-        const filePath = path.join(UPLOADS_DIR, fileName);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-
-        const coverName = `cover_${path.basename(songId)}.jpg`;
-        const coverPath = path.join(UPLOADS_DIR, coverName);
-        if (fs.existsSync(coverPath)) fs.unlinkSync(coverPath);
-      } catch {
-        // Safe to ignore on serverless
+      // Clean up blobs from Vercel Blob Storage
+      if (blobToken && target) {
+        try {
+          if (target.url && isVercelBlobUrl(target.url)) {
+            await del(target.url, { token: blobToken });
+          }
+          if (target.coverArt && isVercelBlobUrl(target.coverArt)) {
+            await del(target.coverArt, { token: blobToken });
+          }
+        } catch (delErr) {
+          console.warn('Vercel Blob deletion warning:', delErr);
+        }
       }
 
-      return res.json({ success: true, message: 'Song deleted from cloud catalog' });
+      return res.json({ success: true, message: 'Song deleted from Vercel Blob catalog' });
     } catch (err: any) {
       console.error('Delete catalog error:', err);
       return res.status(500).json({ error: 'Failed to delete song', code: 'SERVER_ERROR' });
     }
   });
 
-  // 5. Lyrics Generation API (TASK 9)
+  // 8. Lyrics Generation API
   app.post('/api/lyrics/generate', rateLimiter(20, 60000), async (req, res) => {
     try {
       const { title, artist, duration } = req.body;
@@ -455,15 +566,13 @@ Include timestamps spread evenly across the song up to ${totalSec}s. Do not add 
     }
   });
 
-  // 6. Serverless Listen Together Signaling API (TASK 8)
-  // Enables multi-device room synchronization on Vercel where WebSockets are not persistent
+  // 9. Serverless Listen Together Signaling API
   app.get('/api/sync/rooms/:code', (req, res) => {
     const code = req.params.code.toUpperCase().trim();
     const room = serverlessRooms.get(code);
     if (!room) {
       return res.status(404).json({ error: 'Room not found' });
     }
-    // Clean stale members (>30s without poll)
     const now = Date.now();
     room.members = room.members.filter((m) => now - m.updatedAt < 30000);
     return res.json({ room });
@@ -506,7 +615,6 @@ Include timestamps spread evenly across the song up to ${totalSec}s. Do not add 
       }
     }
 
-    // Host updates authoritative playback state
     if (isHost || action === 'sync' || room.hostId === userId) {
       if (songId !== undefined) room.currentSongId = songId;
       if (isPlaying !== undefined) room.isPlaying = !!isPlaying;

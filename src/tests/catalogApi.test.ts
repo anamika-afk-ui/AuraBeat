@@ -1,31 +1,30 @@
 import { describe, it, expect } from 'vitest';
-import { getCloudCatalog, VERIFIED_SEED_CATALOG, serverApp } from '../serverApp';
+import { getCloudCatalog, VERIFIED_SEED_CATALOG, serverApp, isVercelBlobUrl } from '../serverApp';
 
-describe('Server App & Cloud Catalog Architecture', () => {
-  it('exports verified seed catalog with genuine titles and durations', () => {
-    expect(VERIFIED_SEED_CATALOG.length).toBeGreaterThanOrEqual(4);
-    VERIFIED_SEED_CATALOG.forEach((song) => {
-      expect(song.id).toBeDefined();
-      expect(song.title).toBeTruthy();
-      expect(song.artist).toBeTruthy();
-      expect(song.url).toMatch(/^https?:\/\//);
-      expect(song.duration).toBeGreaterThan(0);
-      expect(song.coverArt).toMatch(/^https?:\/\//);
-    });
+describe('Vercel Blob Storage & Cloud Catalog Architecture', () => {
+  it('initializes with empty seed catalog per user request (only Vercel Blob songs appear)', () => {
+    expect(Array.isArray(VERIFIED_SEED_CATALOG)).toBe(true);
+    expect(VERIFIED_SEED_CATALOG.length).toBe(0);
   });
 
-  it('retrieves cloud catalog without throwing', () => {
-    const catalog = getCloudCatalog();
+  it('correctly validates Vercel Blob URLs', () => {
+    expect(isVercelBlobUrl('https://xyz.public.blob.vercel-storage.com/aurabeat/songs/track1.mp3')).toBe(true);
+    expect(isVercelBlobUrl('https://example.com/audio.mp3')).toBe(false);
+    expect(isVercelBlobUrl('/uploads/local.mp3')).toBe(false);
+  });
+
+  it('retrieves cloud catalog without throwing and returns an array', async () => {
+    const catalog = await getCloudCatalog();
     expect(Array.isArray(catalog)).toBe(true);
-    expect(catalog.length).toBeGreaterThan(0);
-    // All items must have valid ID and title
+    // Any items present must be verified on Vercel Blob
     catalog.forEach((item) => {
       expect(item.id).toBeDefined();
       expect(item.title).toBeDefined();
+      expect(isVercelBlobUrl(item.url)).toBe(true);
     });
   });
 
-  it('exports Express serverApp with configured API routes', () => {
+  it('exports Express serverApp with configured Vercel Blob API routes', () => {
     expect(serverApp).toBeDefined();
     expect(typeof serverApp).toBe('function');
   });

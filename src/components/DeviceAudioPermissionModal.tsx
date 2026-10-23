@@ -252,9 +252,11 @@ export const DeviceAudioPermissionModal: React.FC<DeviceAudioPermissionModalProp
         {/* Modal Header */}
         <div className="flex items-start justify-between relative z-10 pb-3 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 shrink-0">
-              <FolderOpen className="w-6 h-6 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="AuraBeat Logo"
+              className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-cyan-500/25 shrink-0 border border-white/10"
+            />
             <div>
               <div className="flex items-center space-x-1.5">
                 <h2 className="text-base sm:text-lg font-black tracking-tight">

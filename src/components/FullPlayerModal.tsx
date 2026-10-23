@@ -246,8 +246,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
                 }`}
               >
                 <img
-                  src={currentSong.coverArt}
+                  src={currentSong.coverArt || '/logo.png'}
                   alt={currentSong.title}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                  }}
                   className="w-full h-full object-cover"
                 />
               </div>

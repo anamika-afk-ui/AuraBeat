@@ -64,9 +64,11 @@ export const InstallModal: React.FC<InstallModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-500 shadow-lg shadow-cyan-500/20">
-              <Smartphone className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="AuraBeat Logo"
+              className="w-11 h-11 rounded-2xl object-cover shadow-lg shadow-cyan-500/20 border border-white/10 shrink-0"
+            />
             <div>
               <h2 className="text-xl font-bold tracking-tight">Install on Mobile Phone</h2>
               <p className="text-xs text-zinc-400">Add AuraBeat to your phone home screen like a native app</p>
