@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import { formatTime } from '../utils/lyricsParser';
 
 interface SparkProgressBarProps {
@@ -10,6 +10,9 @@ interface SparkProgressBarProps {
   size?: 'sm' | 'md' | 'lg';
   accentColor?: string;
 }
+
+// Generate continuous spark distribution points from 2% to 98%
+const DENSE_SPARK_POINTS = Array.from({ length: 39 }, (_, i) => 2 + i * 2.5);
 
 export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
   currentTime,
@@ -75,11 +78,15 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
     }
   };
 
-  // Spark distribution markers along the covered distance
-  const sparkPoints = [10, 25, 42, 60, 78, 92];
+  const trackHeight =
+    size === 'sm'
+      ? 'h-1.5 group-hover:h-2.5'
+      : size === 'lg'
+      ? 'h-3 group-hover:h-3.5'
+      : 'h-2 group-hover:h-3';
 
-  const trackHeight = size === 'sm' ? 'h-1.5 group-hover:h-2.5' : size === 'lg' ? 'h-3 group-hover:h-3.5' : 'h-2 group-hover:h-3';
-  const dotSize = size === 'sm' ? 'w-3.5 h-3.5' : size === 'lg' ? 'w-5 h-5' : 'w-4 h-4';
+  const dotSize =
+    size === 'sm' ? 'w-3.5 h-3.5' : size === 'lg' ? 'w-5 h-5' : 'w-4 h-4';
 
   return (
     <div
@@ -88,7 +95,7 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerLeave}
-      className={`group relative w-full cursor-pointer select-none py-2 touch-none ${className}`}
+      className={`group relative w-full cursor-pointer select-none py-3 touch-none ${className}`}
       role="slider"
       aria-valuemin={0}
       aria-valuemax={duration}
@@ -103,45 +110,68 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
       <div
         className={`relative w-full ${trackHeight} bg-zinc-800/80 rounded-full overflow-visible transition-all duration-200 border border-white/5 backdrop-blur-sm`}
       >
-        {/* Covered Distance with Glowing Cyan-to-Emerald Trail & Sparks */}
+        {/* 1. Covered Distance Glowing Bar from 0% to dot position */}
         <div
-          className="absolute top-0 left-0 bottom-0 rounded-full relative overflow-hidden will-change-[width]"
+          className="absolute top-0 left-0 bottom-0 rounded-full overflow-hidden will-change-[width]"
           style={{
             width: `${progressPercent}%`,
             background: 'linear-gradient(90deg, #06b6d4 0%, #0ea5e9 35%, #10b981 75%, #34d399 100%)',
-            boxShadow: '0 0 14px rgba(6, 182, 212, 0.7), 0 0 24px rgba(16, 185, 129, 0.4)',
+            boxShadow: '0 0 14px rgba(6, 182, 212, 0.8), 0 0 24px rgba(16, 185, 129, 0.6)',
           }}
         >
           {/* Animated Continuous Sparkle Shimmer along entire covered track */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer-sweep" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-shimmer-sweep pointer-events-none" />
+        </div>
 
-          {/* Spark Particles distributed across the covered distance ("jitna distance cover krega utna dur tak spark rhega") */}
-          {sparkPoints.map((pt, idx) => {
-            if (progressPercent < pt) return null;
+        {/* 2. CONTINUOUS SPARK TRAIL: Always spans from Start Point (0%) to Dot Position */}
+        <div className="absolute inset-0 pointer-events-none overflow-visible">
+          {DENSE_SPARK_POINTS.map((pt, idx) => {
+            // Only render sparks up to the current dot position
+            if (pt > progressPercent) return null;
+
             const isGreen = idx % 2 === 0;
+            const glyphs = ['✦', '✧', '⋆', '•'];
+            const glyph = glyphs[idx % glyphs.length];
+
+            // Stagger vertical offsets above, center, and below the bar
+            const vOffsets = [
+              '-top-3',
+              'top-1/2 -translate-y-1/2',
+              'top-2.5',
+              '-top-1.5',
+              'top-1',
+            ];
+            const vOffsetClass = vOffsets[idx % vOffsets.length];
+
+            const color = isGreen ? '#6ee7b7' : '#7dd3fc';
+            const shadowColor = isGreen
+              ? '0 0 8px #10b981, 0 0 14px #34d399, 0 0 20px rgba(52, 211, 153, 0.5)'
+              : '0 0 8px #06b6d4, 0 0 14px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.5)';
+
             return (
               <span
                 key={pt}
-                className="absolute top-1/2 -translate-y-1/2 animate-spark-flicker pointer-events-none select-none text-[8px] font-black leading-none"
+                className={`absolute ${vOffsetClass} -translate-x-1/2 animate-spark-flicker pointer-events-none select-none text-[9px] font-black leading-none gpu-accelerated`}
                 style={{
-                  left: `${(pt / progressPercent) * 100}%`,
-                  color: isGreen ? '#6ee7b7' : '#7dd3fc',
-                  textShadow: isGreen ? '0 0 6px #10b981, 0 0 10px #34d399' : '0 0 6px #06b6d4, 0 0 10px #38bdf8',
-                  animationDelay: `${idx * 0.3}s`,
+                  left: `${pt}%`,
+                  color,
+                  textShadow: shadowColor,
+                  animationDelay: `${(idx * 0.12) % 2}s`,
+                  fontSize: idx % 3 === 0 ? '11px' : idx % 3 === 1 ? '9px' : '8px',
                 }}
               >
-                ✦
+                {glyph}
               </span>
             );
           })}
         </div>
 
-        {/* Floating Sparks Behind the Scrubber Dot (Moving with dot timing) */}
+        {/* 3. The Scrubber Dot + Emission Jet at Current Position */}
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none z-20 will-change-[left] gpu-accelerated"
           style={{ left: `${progressPercent}%` }}
         >
-          {/* The Scrubber Dot */}
+          {/* Main Scrubber Dot */}
           <div
             className={`relative ${dotSize} rounded-full bg-white border-2 border-cyan-300 ring-2 ring-emerald-400 spark-dot-glow group-hover:scale-125 transition-transform duration-150 flex items-center justify-center`}
           >
@@ -149,54 +179,52 @@ export const SparkProgressBar: React.FC<SparkProgressBarProps> = ({
             <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
           </div>
 
-          {/* Spark Particle Jet emitting backwards in Light Blue & Light Green */}
-          {(isPlaying || isDragging) && (
-            <div className="absolute top-1/2 -translate-y-1/2 right-full mr-1 pointer-events-none flex items-center gpu-accelerated">
-              {/* Spark 1 (Light Cyan) */}
-              <span
-                className="absolute -top-3.5 right-1 animate-spark-float-1 text-[11px] font-bold"
-                style={{ color: '#38bdf8', textShadow: '0 0 8px #38bdf8, 0 0 14px #06b6d4' }}
-              >
-                ✦
-              </span>
+          {/* Spark Particle Jet emitting backwards from dot into the covered trail */}
+          <div className="absolute top-1/2 -translate-y-1/2 right-full mr-0.5 pointer-events-none flex items-center gpu-accelerated">
+            {/* Spark 1 (Light Cyan) */}
+            <span
+              className="absolute -top-3.5 right-1 animate-spark-float-1 text-[11px] font-bold"
+              style={{ color: '#38bdf8', textShadow: '0 0 8px #38bdf8, 0 0 14px #06b6d4' }}
+            >
+              ✦
+            </span>
 
-              {/* Spark 2 (Spring Green) */}
-              <span
-                className="absolute top-1.5 right-3 animate-spark-float-2 text-[10px] font-bold"
-                style={{ color: '#34d399', textShadow: '0 0 8px #34d399, 0 0 14px #10b981' }}
-              >
-                ✧
-              </span>
+            {/* Spark 2 (Spring Green) */}
+            <span
+              className="absolute top-1.5 right-3 animate-spark-float-2 text-[10px] font-bold"
+              style={{ color: '#34d399', textShadow: '0 0 8px #34d399, 0 0 14px #10b981' }}
+            >
+              ✧
+            </span>
 
-              {/* Spark 3 (Mint / Aqua) */}
-              <span
-                className="absolute -top-1.5 right-5 animate-spark-float-3 text-[9px] font-bold"
-                style={{ color: '#67e8f9', textShadow: '0 0 7px #67e8f9' }}
-              >
-                ✦
-              </span>
+            {/* Spark 3 (Mint / Aqua) */}
+            <span
+              className="absolute -top-1.5 right-5 animate-spark-float-3 text-[9px] font-bold"
+              style={{ color: '#67e8f9', textShadow: '0 0 7px #67e8f9' }}
+            >
+              ✦
+            </span>
 
-              {/* Spark 4 (Emerald Green particle dot) */}
-              <span
-                className="absolute top-3 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-spark-float-4"
-                style={{ boxShadow: '0 0 8px #34d399, 0 0 12px #10b981' }}
-              />
+            {/* Spark 4 (Emerald Green particle dot) */}
+            <span
+              className="absolute top-3 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-spark-float-4"
+              style={{ boxShadow: '0 0 8px #34d399, 0 0 12px #10b981' }}
+            />
 
-              {/* Spark 5 (Sky Blue particle dot) */}
-              <span
-                className="absolute -top-2.5 right-6 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-spark-float-2"
-                style={{ boxShadow: '0 0 8px #38bdf8, 0 0 12px #06b6d4' }}
-              />
+            {/* Spark 5 (Sky Blue particle dot) */}
+            <span
+              className="absolute -top-2.5 right-6 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-spark-float-2"
+              style={{ boxShadow: '0 0 8px #38bdf8, 0 0 12px #06b6d4' }}
+            />
 
-              {/* Behind-the-dot subtle glowing spark trail mist */}
-              <div
-                className="w-12 h-2.5 rounded-full opacity-80 blur-[2px]"
-                style={{
-                  background: 'linear-gradient(270deg, rgba(56, 189, 248, 0.9), rgba(52, 211, 153, 0.7), transparent)',
-                }}
-              />
-            </div>
-          )}
+            {/* Behind-the-dot subtle glowing spark trail mist */}
+            <div
+              className="w-14 h-2.5 rounded-full opacity-90 blur-[2px]"
+              style={{
+                background: 'linear-gradient(270deg, rgba(56, 189, 248, 0.95), rgba(52, 211, 153, 0.8), transparent)',
+              }}
+            />
+          </div>
         </div>
       </div>
 

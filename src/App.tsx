@@ -201,7 +201,10 @@ export default function App() {
   const [blobUploadStatus, setBlobUploadStatus] = useState<string | null>(null);
   const [uploadingSongIds, setUploadingSongIds] = useState<Record<string, boolean>>({});
 
-  const currentSong = queue[currentSongIndex] || songs[0] || null;
+  // Active Playing Song - Strictly tracks the song chosen by the user, never hijacked by background sync
+  const [activePlayingSong, setActivePlayingSong] = useState<Song | null>(null);
+
+  const currentSong = activePlayingSong || queue[currentSongIndex] || songs[0] || null;
 
   // Initialize DB & load saved data
   useEffect(() => {
@@ -320,7 +323,6 @@ export default function App() {
 
     // 1-Time Device Audio Sync Setup & Auto Background Re-Sync
     const hasSyncGranted = localStorage.getItem('aurabeat_device_sync_granted') === 'true';
-    const hasPrompted = localStorage.getItem('aurabeat_audio_permission_asked');
 
     let promptTimer: NodeJS.Timeout | null = null;
     if (hasSyncGranted) {
@@ -328,12 +330,12 @@ export default function App() {
       deviceSyncEngine.attemptAutoSilentSync((newSong) => {
         handleSingleDeviceSongFound(newSong);
       });
-    } else if (!hasPrompted) {
-      // First-time visit: Prompt for 1-time permission so all device folders sync
+    } else {
+      // Prompt on open so all device folders scan automatically
       promptTimer = setTimeout(() => {
         setIsFirstTimeAudioPrompt(true);
         setIsDeviceAudioModalOpen(true);
-      }, 700);
+      }, 350);
     }
 
     return () => {
@@ -345,6 +347,7 @@ export default function App() {
 
   // Handle live incremental single device song found in background
   const handleSingleDeviceSongFound = (newSong: Song) => {
+    // 1. Add ONLY to the songs list (library list)
     setSongs((prev) => {
       if (
         prev.some(
@@ -356,8 +359,10 @@ export default function App() {
       ) {
         return prev;
       }
-      return [newSong, ...prev];
+      return [...prev, newSong];
     });
+
+    // 2. Append to queue at end so active song index is preserved
     setQueue((prev) => {
       if (
         prev.some(
@@ -369,8 +374,9 @@ export default function App() {
       ) {
         return prev;
       }
-      return [newSong, ...prev];
+      return [...prev, newSong];
     });
+    // Never touch activePlayingSong or audioRef.current.src here!
   };
 
   // Handle batch of device songs scanned & imported
@@ -378,18 +384,14 @@ export default function App() {
     setSongs((prev) => {
       const existingIds = new Set(prev.map((s) => s.id));
       const newUnique = importedSongs.filter((s) => !existingIds.has(s.id));
-      return [...newUnique, ...prev];
+      return [...prev, ...newUnique];
     });
     setQueue((prev) => {
       const existingIds = new Set(prev.map((s) => s.id));
       const newUnique = importedSongs.filter((s) => !existingIds.has(s.id));
-      return [...newUnique, ...prev];
+      return [...prev, ...newUnique];
     });
-    // Set to play the first imported song if available
-    if (importedSongs.length > 0 && audioRef.current && !isPlaying) {
-      audioRef.current.src = importedSongs[0].url;
-      audioRef.current.preload = 'metadata';
-    }
+    // Synced songs do NOT override active playing song in mini player
   };
 
   // Initialize Audio Engine once audio element mounts
@@ -571,13 +573,15 @@ export default function App() {
     const targetSong = forceSong || queue[index] || songs[index];
     if (!targetSong) return;
 
+    setActivePlayingSong(targetSong);
+
     if (forceSong) {
       const existingIdx = queue.findIndex((s) => s.id === forceSong.id);
       if (existingIdx !== -1) {
         setCurrentSongIndex(existingIdx);
       } else {
-        setQueue((prev) => [forceSong, ...prev]);
-        setCurrentSongIndex(0);
+        setQueue((prev) => [...prev, forceSong]);
+        setCurrentSongIndex(queue.length);
       }
     } else {
       setCurrentSongIndex(index);
