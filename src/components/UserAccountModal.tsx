@@ -25,6 +25,7 @@ interface UserAccountModalProps {
   onClearOfflineCache: () => void;
   accentColor?: string;
   onOpenAdminPanel?: () => void;
+  onOpenDeviceSync?: () => void;
 }
 
 const AVATAR_PRESETS = [
@@ -45,6 +46,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   onClearOfflineCache,
   accentColor = '#06b6d4',
   onOpenAdminPanel,
+  onOpenDeviceSync,
 }) => {
   const [userName, setUserName] = useState(profile.name || 'Aura Listener');
   const [userAvatar, setUserAvatar] = useState(profile.avatar || AVATAR_PRESETS[0]);
@@ -128,11 +130,42 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
         {/* Content */}
         <div className="mt-5 space-y-4">
-          {/* Quick Action: Direct Upload Song to Storage */}
+          {/* Action 1: Auto-Sync Device Folders */}
+          {onOpenDeviceSync && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/50 via-teal-950/40 to-zinc-900 border border-emerald-500/40">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                    <FolderOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Auto-Sync Device Folders</h4>
+                    <p className="text-[11px] text-zinc-400">
+                      Phone ke sabhi folders se gaane background me load karein
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDeviceSync();
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer flex items-center space-x-1"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Sync Now</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Action 2: Direct Upload Song to Storage */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-cyan-950/30 to-blue-950/40 border border-emerald-500/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
                   <Upload className="w-4 h-4" />
                 </div>
                 <div>
@@ -150,7 +183,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                     onClose();
                     onOpenAdminPanel();
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black font-extrabold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer flex items-center space-x-1"
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md shadow-cyan-500/20 transition-all cursor-pointer flex items-center space-x-1"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>Upload</span>

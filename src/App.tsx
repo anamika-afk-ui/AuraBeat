@@ -33,6 +33,8 @@ import { LyricsOverlay } from './components/LyricsOverlay';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { BackgroundSyncIndicator } from './components/BackgroundSyncIndicator';
+import { deviceSyncEngine } from './utils/deviceSyncEngine';
 import confetti from 'canvas-confetti';
 import {
   Play,
@@ -316,10 +318,18 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // First-time visit: Prompt for device audio access so all songs load automatically
+    // 1-Time Device Audio Sync Setup & Auto Background Re-Sync
+    const hasSyncGranted = localStorage.getItem('aurabeat_device_sync_granted') === 'true';
     const hasPrompted = localStorage.getItem('aurabeat_audio_permission_asked');
+
     let promptTimer: NodeJS.Timeout | null = null;
-    if (!hasPrompted) {
+    if (hasSyncGranted) {
+      // Permission already granted previously! Quietly auto-sync in the background
+      deviceSyncEngine.attemptAutoSilentSync((newSong) => {
+        handleSingleDeviceSongFound(newSong);
+      });
+    } else if (!hasPrompted) {
+      // First-time visit: Prompt for 1-time permission so all device folders sync
       promptTimer = setTimeout(() => {
         setIsFirstTimeAudioPrompt(true);
         setIsDeviceAudioModalOpen(true);
@@ -332,6 +342,36 @@ export default function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Handle live incremental single device song found in background
+  const handleSingleDeviceSongFound = (newSong: Song) => {
+    setSongs((prev) => {
+      if (
+        prev.some(
+          (s) =>
+            s.id === newSong.id ||
+            (s.title.toLowerCase() === newSong.title.toLowerCase() &&
+              s.artist.toLowerCase() === newSong.artist.toLowerCase())
+        )
+      ) {
+        return prev;
+      }
+      return [newSong, ...prev];
+    });
+    setQueue((prev) => {
+      if (
+        prev.some(
+          (s) =>
+            s.id === newSong.id ||
+            (s.title.toLowerCase() === newSong.title.toLowerCase() &&
+              s.artist.toLowerCase() === newSong.artist.toLowerCase())
+        )
+      ) {
+        return prev;
+      }
+      return [newSong, ...prev];
+    });
+  };
 
   // Handle batch of device songs scanned & imported
   const handleDeviceSongsImported = (importedSongs: Song[]) => {
@@ -1336,6 +1376,20 @@ export default function App() {
             title="Theme & Colors"
           >
             <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+
+          {/* 1-Click Auto-Sync Device Audio */}
+          <button
+            onClick={() => {
+              setIsFirstTimeAudioPrompt(false);
+              setIsDeviceAudioModalOpen(true);
+            }}
+            className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-all shadow-sm hover:shadow-emerald-500/20 shrink-0 cursor-pointer active:scale-95"
+            title="Auto-scan and background sync all device music folders"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">Sync Device</span>
+            <span className="sm:hidden">Sync</span>
           </button>
 
           {/* Direct Upload Song Button */}
@@ -2375,6 +2429,10 @@ export default function App() {
           setIsUserOpen(false);
           setIsAdminModalOpen(true);
         }}
+        onOpenDeviceSync={() => {
+          setIsUserOpen(false);
+          setIsDeviceAudioModalOpen(true);
+        }}
       />
 
       {/* INSTALL ON MOBILE MODAL */}
@@ -2400,10 +2458,14 @@ export default function App() {
       <DeviceAudioPermissionModal
         isOpen={isDeviceAudioModalOpen}
         onClose={() => setIsDeviceAudioModalOpen(false)}
+        onSongFound={handleSingleDeviceSongFound}
         onSongsImported={handleDeviceSongsImported}
         accentColor={currentTheme.primaryColor}
         isFirstTimePrompt={isFirstTimeAudioPrompt}
       />
+
+      {/* FLOATING NON-BLOCKING BACKGROUND SYNC PILL */}
+      <BackgroundSyncIndicator accentColor={currentTheme.primaryColor} />
 
       {/* REAL-TIME SYNCHRONIZED LYRICS OVERLAY */}
       <LyricsOverlay
