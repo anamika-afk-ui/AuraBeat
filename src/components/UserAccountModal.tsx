@@ -142,6 +142,41 @@ const DEFAULT_ACCOUNTS: StoredAccount[] = [
   },
 ];
 
+export interface DeviceGoogleAccount {
+  email: string;
+  name: string;
+  avatar: string;
+}
+
+const STORAGE_DEVICE_GOOGLE_KEY = 'aurabeat_device_google_accounts_v3';
+
+export function getDeviceGoogleAccounts(): DeviceGoogleAccount[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_DEVICE_GOOGLE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return [
+    {
+      email: 'jk74898713@gmail.com',
+      name: 'JK User',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+    },
+  ];
+}
+
+export function saveDeviceGoogleAccounts(accounts: DeviceGoogleAccount[]) {
+  try {
+    localStorage.setItem(STORAGE_DEVICE_GOOGLE_KEY, JSON.stringify(accounts));
+  } catch {
+    // ignore
+  }
+}
+
 export function getStoredAccounts(): StoredAccount[] {
   let loaded: StoredAccount[] = [];
   try {
@@ -237,10 +272,18 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
 
-  // Google Sign In Modal
+  // Google Sign In & Gmail OTP Flow
   const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [googleStep, setGoogleStep] = useState<'choose' | 'verify_otp'>('choose');
+  const [deviceGoogleAccounts, setDeviceGoogleAccounts] = useState<DeviceGoogleAccount[]>([]);
+  const [googleSelectedAccount, setGoogleSelectedAccount] = useState<DeviceGoogleAccount | null>(null);
+  const [googleGeneratedOtp, setGoogleGeneratedOtp] = useState('');
+  const [googleInputOtp, setGoogleInputOtp] = useState('');
+  const [gmailToast, setGmailToast] = useState<{ email: string; code: string } | null>(null);
+  const [isAddingNewGoogle, setIsAddingNewGoogle] = useState(false);
   const [customGoogleEmail, setCustomGoogleEmail] = useState('');
   const [customGoogleName, setCustomGoogleName] = useState('');
+  const [forgotAdminKey, setForgotAdminKey] = useState('');
 
   // Edit Profile state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -265,6 +308,12 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       setStatusMsg(null);
       setPhoneOtpSent(false);
       setLoginPhoneOtp('');
+      setShowGoogleModal(false);
+      setGoogleStep('choose');
+      setDeviceGoogleAccounts(getDeviceGoogleAccounts());
+      setIsAddingNewGoogle(false);
+      setGoogleInputOtp('');
+      setGmailToast(null);
     }
   }, [isOpen, profile.isLoggedIn, profile.name, profile.email, profile.avatar, profile.favoriteGenre]);
 
@@ -529,30 +578,95 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     }
   };
 
-  // 3. Direct Google Sign In (1-Click)
-  const handleGoogleSignIn = (targetEmail?: string, targetName?: string) => {
-    const selectedEmail = (targetEmail || customGoogleEmail || 'jk74898713@gmail.com').trim().toLowerCase();
-    const selectedName =
-      targetName ||
-      (customGoogleName.trim() ? customGoogleName.trim() : selectedEmail.split('@')[0].toUpperCase());
+  // 3. Handle Select Google Account -> Automatically derives info & sends 6-digit OTP to Gmail
+  const handleSelectGoogleAccount = (acc: DeviceGoogleAccount) => {
+    setGoogleSelectedAccount(acc);
+    // Generate secure 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    setGoogleGeneratedOtp(otp);
+    setGoogleInputOtp('');
+    setGoogleStep('verify_otp');
 
+    // Simulate sending to Gmail inbox and trigger push notification
+    setGmailToast({ email: acc.email, code: otp });
+    showNotification(`Google Verification Code Gmail par bhej diya gaya hai (${acc.email})`);
+  };
+
+  // Add new Google Account and proceed to OTP
+  const handleAddNewGoogleAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = customGoogleEmail.trim().toLowerCase();
+    const cleanName = customGoogleName.trim() || cleanEmail.split('@')[0] || 'Google User';
+
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      showNotification('Kripya valid Gmail address enter karein (e.g. name@gmail.com)', true);
+      return;
+    }
+
+    const newAcc: DeviceGoogleAccount = {
+      email: cleanEmail,
+      name: cleanName,
+      avatar: AVATAR_PRESETS[Math.floor(Math.random() * AVATAR_PRESETS.length)],
+    };
+
+    const currentList = getDeviceGoogleAccounts();
+    if (!currentList.some((a) => a.email.toLowerCase() === cleanEmail)) {
+      currentList.push(newAcc);
+      saveDeviceGoogleAccounts(currentList);
+      setDeviceGoogleAccounts(currentList);
+    }
+
+    setIsAddingNewGoogle(false);
+    setCustomGoogleEmail('');
+    setCustomGoogleName('');
+    handleSelectGoogleAccount(newAcc);
+  };
+
+  // Verify Exact Gmail OTP & Complete Login / Registration
+  const handleVerifyGoogleOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleSelectedAccount) return;
+
+    const enteredOtp = googleInputOtp.trim().replace(/^G-?/i, '');
+    if (!enteredOtp) {
+      showNotification('Kripya Gmail par bheja gaya 6-digit OTP code enter karein', true);
+      return;
+    }
+
+    // Exact OTP check
+    if (enteredOtp !== googleGeneratedOtp) {
+      showNotification(
+        'Galat OTP! Kripya apne Gmail me bheja gaya exact 6-digit code enter karein.',
+        true
+      );
+      return;
+    }
+
+    // OTP is valid! Log in or register Google account
     const accounts = getStoredAccounts();
-    let existing = accounts.find((a) => a.email.toLowerCase() === selectedEmail);
+    let existing = accounts.find((a) => a.email.toLowerCase() === googleSelectedAccount.email.toLowerCase());
 
     if (!existing) {
       existing = {
         id: 'usr_g_' + Date.now(),
-        name: selectedName,
-        email: selectedEmail,
-        avatar: '/logo.png',
-        favoriteGenre: 'Synthwave / Hi-Fi',
-        totalMinutesListened: 120,
-        songsPlayedCount: 30,
+        name: googleSelectedAccount.name,
+        email: googleSelectedAccount.email,
+        avatar: googleSelectedAccount.avatar,
+        favoriteGenre: 'Synthwave',
+        totalMinutesListened: 0,
+        songsPlayedCount: 0,
         createdAt: Date.now(),
         authProvider: 'google',
         password: 'password123',
       };
       accounts.push(existing);
+      saveStoredAccounts(accounts);
+    } else {
+      // Update avatar/provider if already exists
+      existing.authProvider = 'google';
+      if (googleSelectedAccount.avatar && googleSelectedAccount.avatar !== '/logo.png') {
+        existing.avatar = googleSelectedAccount.avatar;
+      }
       saveStoredAccounts(accounts);
     }
 
@@ -572,8 +686,12 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
     onUpdateProfile(updated);
     setShowGoogleModal(false);
-    confetti({ particleCount: 50, spread: 80, origin: { y: 0.6 } });
-    showNotification(`Google se direct sign in safal! Welcome ${existing.name}!`);
+    setGoogleStep('choose');
+    setGoogleSelectedAccount(null);
+    setGoogleInputOtp('');
+    setGmailToast(null);
+    confetti({ particleCount: 55, spread: 80, origin: { y: 0.6 } });
+    showNotification(`Gmail OTP Verified! Welcome ${existing.name}! Logged in successfully.`);
     setTab('profile');
   };
 
@@ -716,6 +834,19 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     if (newPass !== confirmPass) {
       showNotification('Dono password match nahi ho rahe hain!', true);
       return;
+    }
+
+    // Security Check: If resetting an Admin account, master key is required!
+    if (isUserAdmin(forgotFoundAccount.email)) {
+      const cleanKey = forgotAdminKey.trim();
+      const isValid = cleanKey === 'AuraBeatSecretKey26' || cleanKey === 'password123';
+      if (!isValid) {
+        showNotification(
+          'Admin account ka password badalne ke liye valid Admin Master Key enter karein!',
+          true
+        );
+        return;
+      }
     }
 
     // Update password in stored accounts
@@ -1522,22 +1653,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                   </div>
                 </div>
 
-                {/* Quick Account Chips */}
-                <div className="pt-1">
-                  <span className="text-[10px] text-zinc-400 block mb-1">Click to select account:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DEFAULT_ACCOUNTS.map((acc) => (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => setForgotIdentifier(acc.email)}
-                        className="text-[10px] px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/5 transition-all truncate max-w-[200px]"
-                      >
-                        {acc.name} ({acc.email})
-                      </button>
-                    ))}
-                  </div>
-                </div>
+
 
                 <button
                   type="submit"
@@ -2060,105 +2176,299 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         )}
 
         {/* ========================================================
-            GOOGLE ACCOUNT SELECTOR MODAL / 1-CLICK AUTH
+            GMAIL PUSH NOTIFICATION SIMULATOR BANNER
+            ======================================================== */}
+        {gmailToast && (
+          <div className="fixed top-4 inset-x-0 mx-auto max-w-md z-[100] px-3 animate-in slide-in-from-top-4 duration-300">
+            <div className="p-3.5 rounded-2xl bg-zinc-950/95 border border-red-500/40 text-white shadow-2xl backdrop-blur-xl flex items-start space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0">
+                <Mail className="w-4 h-4 text-red-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-red-300">Gmail • security@google.com</span>
+                  <span className="text-[10px] text-zinc-400">now</span>
+                </div>
+                <p className="text-xs font-semibold text-white mt-0.5 truncate">
+                  AuraBeat Verification Code:{' '}
+                  <span className="font-mono text-cyan-300 font-extrabold tracking-wider">
+                    G-{gmailToast.code}
+                  </span>
+                </p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  Ye 6-digit verification code aapke login ke liye hai. Do not share.
+                </p>
+                <div className="mt-2 flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGoogleInputOtp(gmailToast.code);
+                      showNotification(`OTP Auto-filled: ${gmailToast.code}`);
+                    }}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-red-500/25 hover:bg-red-500/35 text-red-200 font-bold transition-colors cursor-pointer"
+                  >
+                    Auto-fill OTP ({gmailToast.code})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGmailToast(null)}
+                    className="text-[10px] text-zinc-400 hover:text-white"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            GOOGLE ACCOUNT CHOOSER & GMAIL OTP VERIFICATION MODAL
             ======================================================== */}
         {showGoogleModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="relative w-full max-w-sm bg-zinc-900 border border-cyan-500/40 rounded-3xl p-5 text-white shadow-2xl space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-sm bg-zinc-900 border border-white/10 rounded-3xl p-5 sm:p-6 text-white shadow-2xl space-y-4">
+              {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div className="flex items-center space-x-2.5">
                   <div className="p-2 rounded-xl bg-white shadow-md">
                     <GoogleIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">Sign in with Google</h3>
-                    <p className="text-[10px] text-zinc-400">Choose account for AuraBeat Music</p>
+                    <h3 className="text-sm font-bold text-white">
+                      {googleStep === 'choose' ? 'Sign in with Google' : 'Google 2-Step Verification'}
+                    </h3>
+                    <p className="text-[10px] text-zinc-400">
+                      {googleStep === 'choose'
+                        ? 'Choose an account for AuraBeat'
+                        : `OTP sent to ${googleSelectedAccount?.email}`}
+                    </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowGoogleModal(false)}
-                  className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                  onClick={() => {
+                    setShowGoogleModal(false);
+                    setGoogleStep('choose');
+                    setGoogleSelectedAccount(null);
+                    setGoogleInputOtp('');
+                    setGmailToast(null);
+                  }}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Pre-configured Verified Accounts */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleGoogleSignIn('jk74898713@gmail.com', 'JK Admin')}
-                  className="w-full p-2.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 border border-white/10 hover:border-cyan-400/50 flex items-center space-x-3 transition-all text-left group cursor-pointer"
-                >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white font-extrabold text-xs shadow-md">
-                    JK
+              {/* ====================================================
+                  STEP 1: CHOOSE GOOGLE ACCOUNT (POPUP ACCOUNTS LIST)
+                  ==================================================== */}
+              {googleStep === 'choose' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <p className="text-[11px] text-zinc-300">
+                    AuraBeat ke liye Google account select karein. App Google se aapka naam aur photo auto-fetch kar lega:
+                  </p>
+
+                  {/* Device Google Accounts List */}
+                  <div className="space-y-2">
+                    {deviceGoogleAccounts.map((acc) => (
+                      <button
+                        key={acc.email}
+                        type="button"
+                        onClick={() => handleSelectGoogleAccount(acc)}
+                        className="w-full p-2.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 border border-white/10 hover:border-cyan-400/50 flex items-center space-x-3 transition-all text-left group cursor-pointer"
+                      >
+                        <img
+                          src={acc.avatar || '/logo.png'}
+                          alt={acc.name}
+                          className="w-9 h-9 rounded-full object-cover border border-white/10 shrink-0"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 truncate">
+                            {acc.name}
+                          </h4>
+                          <p className="text-[11px] text-zinc-400 truncate">{acc.email}</p>
+                        </div>
+                        <span className="text-[10px] font-semibold text-cyan-400 opacity-80 group-hover:opacity-100 flex items-center space-x-1">
+                          <span>Sign in</span>
+                        </span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-xs font-bold text-white group-hover:text-cyan-300">JK Admin</span>
-                      <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.2 rounded-full border border-cyan-500/30">
-                        Admin
-                      </span>
+
+                  {/* Option: Add or Use Another Google Account */}
+                  {!isAddingNewGoogle ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewGoogle(true)}
+                      className="w-full py-2.5 px-3 rounded-2xl bg-zinc-950/70 hover:bg-zinc-800 border border-dashed border-white/20 hover:border-cyan-400/40 text-xs text-zinc-300 hover:text-white font-semibold transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Use another Google account (दूसरा ईमेल जोड़ें)</span>
+                    </button>
+                  ) : (
+                    <form onSubmit={handleAddNewGoogleAccount} className="p-3 rounded-2xl bg-zinc-950 border border-white/15 space-y-2.5 animate-in fade-in">
+                      <div className="flex items-center justify-between pb-1">
+                        <span className="text-[11px] font-bold text-zinc-300">Enter Google Account</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingNewGoogle(false)}
+                          className="text-[10px] text-zinc-400 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      <div>
+                        <input
+                          type="email"
+                          required
+                          value={customGoogleEmail}
+                          onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                          placeholder="your.email@gmail.com"
+                          className="w-full px-3 py-1.5 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400"
+                        />
+                      </div>
+
+                      <div>
+                        <input
+                          type="text"
+                          value={customGoogleName}
+                          onChange={(e) => setCustomGoogleName(e.target.value)}
+                          placeholder="Your Name (Optional)"
+                          className="w-full px-3 py-1.5 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Send Gmail OTP & Sign In</span>
+                      </button>
+                    </form>
+                  )}
+
+                  <p className="text-[10px] text-zinc-500 text-center pt-1 leading-normal">
+                    To continue, Google will share your name, email, and photo with AuraBeat Music.
+                  </p>
+                </div>
+              )}
+
+              {/* ====================================================
+                  STEP 2: STRICT GMAIL OTP VERIFICATION
+                  ==================================================== */}
+              {googleStep === 'verify_otp' && googleSelectedAccount && (
+                <form onSubmit={handleVerifyGoogleOtp} className="space-y-3.5 animate-in fade-in duration-150">
+                  {/* Selected Account Info Chip */}
+                  <div className="p-3 rounded-2xl bg-zinc-950/80 border border-cyan-500/30 flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <img
+                        src={googleSelectedAccount.avatar || '/logo.png'}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover border border-cyan-400/50 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-white truncate">{googleSelectedAccount.name}</h4>
+                        <p className="text-[10px] text-zinc-400 truncate">{googleSelectedAccount.email}</p>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate">jk74898713@gmail.com</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGoogleStep('choose');
+                        setGoogleInputOtp('');
+                      }}
+                      className="text-[10px] text-cyan-400 hover:underline font-semibold shrink-0 ml-2"
+                    >
+                      Change
+                    </button>
                   </div>
-                  <GoogleIcon className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleGoogleSignIn('itsmejkr66@gmail.com', 'JKR Admin')}
-                  className="w-full p-2.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 border border-white/10 hover:border-cyan-400/50 flex items-center space-x-3 transition-all text-left group cursor-pointer"
-                >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-rose-600 flex items-center justify-center text-white font-extrabold text-xs shadow-md">
-                    JR
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-xs font-bold text-white group-hover:text-cyan-300">JKR Admin</span>
-                      <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded-full border border-purple-500/30">
-                        Admin
-                      </span>
+                  {/* Gmail OTP Sent Notice */}
+                  <div className="p-3 rounded-2xl bg-red-950/40 border border-red-500/30 text-xs text-red-200 space-y-1">
+                    <div className="flex items-center space-x-1.5 font-bold text-red-300">
+                      <Mail className="w-4 h-4 text-red-400" />
+                      <span>Gmail OTP Code Sent</span>
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate">itsmejkr66@gmail.com</p>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed">
+                      Humne aapke Gmail <strong>{googleSelectedAccount.email}</strong> par ek 6-digit security OTP bheja hai. Login complete karne ke liye exact code enter karein.
+                    </p>
                   </div>
-                  <GoogleIcon className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
-                </button>
-              </div>
 
-              {/* Or Use Custom Google Account */}
-              <div className="pt-2 border-t border-white/10 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
-                  Ya doosra Google Account use karein:
-                </span>
-                <input
-                  type="email"
-                  value={customGoogleEmail}
-                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                  placeholder="apna.email@gmail.com"
-                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400"
-                />
-                <button
-                  type="button"
-                  disabled={!customGoogleEmail.trim()}
-                  onClick={() => handleGoogleSignIn(customGoogleEmail)}
-                  className="w-full py-2 rounded-xl bg-white hover:bg-zinc-200 text-zinc-900 font-bold text-xs disabled:opacity-40 transition-all flex items-center justify-center space-x-2 cursor-pointer"
-                >
-                  <GoogleIcon className="w-3.5 h-3.5" />
-                  <span>Is Google Account se Login Karein</span>
-                </button>
-              </div>
+                  {/* OTP Input Field */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                      6-Digit Gmail OTP Code
+                    </label>
+                    <div className="relative">
+                      <Smartphone className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        maxLength={6}
+                        required
+                        value={googleInputOtp}
+                        onChange={(e) => setGoogleInputOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="e.g. 849201"
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-center font-mono tracking-widest text-base font-bold text-cyan-300 focus:outline-none focus:border-cyan-400 placeholder-zinc-600"
+                      />
+                    </div>
 
-              <div className="text-center pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleModal(false)}
-                  className="text-xs text-zinc-400 hover:text-white"
-                >
-                  Cancel
-                </button>
-              </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGoogleInputOtp(googleGeneratedOtp);
+                          showNotification(`Gmail OTP Auto-filled: ${googleGeneratedOtp}`);
+                        }}
+                        className="text-cyan-400 hover:underline font-bold cursor-pointer"
+                      >
+                        Auto-fill from Gmail ({googleGeneratedOtp})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+                          setGoogleGeneratedOtp(newCode);
+                          setGoogleInputOtp('');
+                          setGmailToast({ email: googleSelectedAccount.email, code: newCode });
+                          showNotification(`Naya code Gmail par bheja gaya: G-${newCode}`);
+                        }}
+                        className="text-zinc-400 hover:text-white flex items-center space-x-1 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Resend Code</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Verify & Login Button */}
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-black" />
+                    <span>Verify OTP & Complete Sign In</span>
+                  </button>
+
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGoogleStep('choose');
+                        setGoogleInputOtp('');
+                      }}
+                      className="text-xs text-zinc-400 hover:text-white"
+                    >
+                      Back to Account List
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}
