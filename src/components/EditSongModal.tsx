@@ -222,20 +222,19 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
             </div>
           </div>
 
-          {/* Publish to Online Library Section (Admin accounts only) */}
-          {isUserAdmin(userEmail) && (
-            <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-zinc-950 to-cyan-950/30 border border-indigo-500/30 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Globe className="w-4 h-4 text-cyan-400" />
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Online Library me Publish Karein
-                  </h4>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  Admin Tool
-                </span>
+          {/* Publish to Online Library Section */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-zinc-950 to-cyan-950/30 border border-indigo-500/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Globe className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Online Storage me Publish Karein
+                </h4>
               </div>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                Cloud Sync
+              </span>
+            </div>
               <p className="text-[11px] text-zinc-300 leading-relaxed">
                 Is gaane ko online library me publish karne se ye cloud par save hoga aur AuraBeat ke Online tab me sabhi users ke liye instantly play hoga!
               </p>
@@ -308,8 +307,7 @@ export const EditSongModal: React.FC<EditSongModalProps> = ({
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
 
         {/* Footer Actions */}
         <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between">
