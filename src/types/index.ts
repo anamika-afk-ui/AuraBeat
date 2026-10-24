@@ -89,12 +89,14 @@ export interface UserProfile {
   id: string;
   name: string;
   email?: string;
+  phone?: string;
   avatar: string;
   totalMinutesListened: number;
   songsPlayedCount: number;
   favoriteGenre: string;
   isLoggedIn: boolean;
   joinedAt?: number;
+  authProvider?: 'password' | 'google' | 'phone' | 'demo';
 }
 
 export const ADMIN_EMAILS: readonly string[] = [

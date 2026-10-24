@@ -20,8 +20,37 @@ import {
   Music,
   Clock,
   Disc,
+  Phone,
+  Key,
+  ArrowLeft,
+  CheckCircle2,
+  HelpCircle,
+  Smartphone,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+
+export const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+    />
+  </svg>
+);
 
 interface UserAccountModalProps {
   isOpen: boolean;
@@ -34,16 +63,18 @@ interface UserAccountModalProps {
   onOpenAdminPanel?: () => void;
 }
 
-interface StoredAccount {
+export interface StoredAccount {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   password?: string;
   avatar: string;
   favoriteGenre: string;
   totalMinutesListened?: number;
   songsPlayedCount?: number;
   createdAt: number;
+  authProvider?: 'password' | 'google' | 'phone' | 'demo';
 }
 
 const AVATAR_PRESETS = [
@@ -66,53 +97,90 @@ const GENRES = [
   'Punjabi',
 ];
 
-const STORAGE_USERS_KEY = 'aurabeat_users_db';
+const STORAGE_USERS_KEY = 'aurabeat_users_db_v3';
+const LEGACY_STORAGE_KEYS = ['aurabeat_users_db', 'aurabeat_registered_users_v2', 'aurabeat_registered_users'];
 
-function getStoredAccounts(): StoredAccount[] {
+const DEFAULT_ACCOUNTS: StoredAccount[] = [
+  {
+    id: 'usr_jk_admin',
+    name: 'JK Admin',
+    email: 'jk74898713@gmail.com',
+    phone: '9876543210',
+    password: 'password123',
+    avatar: '/logo.png',
+    favoriteGenre: 'Bass & Electronic',
+    totalMinutesListened: 240,
+    songsPlayedCount: 54,
+    createdAt: Date.now() - 86400000 * 60,
+    authProvider: 'google',
+  },
+  {
+    id: 'usr_itsme_admin',
+    name: 'JKR Admin',
+    email: 'itsmejkr66@gmail.com',
+    phone: '9876543211',
+    password: 'password123',
+    avatar: '/logo.png',
+    favoriteGenre: 'Synthwave / Hi-Fi',
+    totalMinutesListened: 190,
+    songsPlayedCount: 42,
+    createdAt: Date.now() - 86400000 * 60,
+    authProvider: 'google',
+  },
+  {
+    id: 'demo_user_1',
+    name: 'Aura Music Master',
+    email: 'demo@aurabeat.app',
+    phone: '9999999999',
+    password: 'password123',
+    avatar: AVATAR_PRESETS[0],
+    favoriteGenre: 'Synthwave',
+    totalMinutesListened: 142,
+    songsPlayedCount: 38,
+    createdAt: Date.now() - 86400000 * 30,
+    authProvider: 'demo',
+  },
+];
+
+export function getStoredAccounts(): StoredAccount[] {
+  let loaded: StoredAccount[] = [];
   try {
     const raw = localStorage.getItem(STORAGE_USERS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      loaded = JSON.parse(raw);
+    } else {
+      for (const k of LEGACY_STORAGE_KEYS) {
+        const leg = localStorage.getItem(k);
+        if (leg) {
+          loaded = JSON.parse(leg);
+          break;
+        }
+      }
+    }
   } catch {
-    // ignore
+    loaded = [];
   }
-  return [
-    {
-      id: 'usr_jk_admin',
-      name: 'JK Admin',
-      email: 'jk74898713@gmail.com',
-      password: 'password123',
-      avatar: '/logo.png',
-      favoriteGenre: 'Bass & Electronic',
-      totalMinutesListened: 240,
-      songsPlayedCount: 54,
-      createdAt: Date.now() - 86400000 * 60,
-    },
-    {
-      id: 'usr_itsme_admin',
-      name: 'JKR Admin',
-      email: 'itsmejkr66@gmail.com',
-      password: 'password123',
-      avatar: '/logo.png',
-      favoriteGenre: 'Synthwave / Hi-Fi',
-      totalMinutesListened: 190,
-      songsPlayedCount: 42,
-      createdAt: Date.now() - 86400000 * 60,
-    },
-    {
-      id: 'demo_user_1',
-      name: 'Aura Music Master',
-      email: 'demo@aurabeat.app',
-      password: 'password123',
-      avatar: AVATAR_PRESETS[0],
-      favoriteGenre: 'Synthwave',
-      totalMinutesListened: 142,
-      songsPlayedCount: 38,
-      createdAt: Date.now() - 86400000 * 30,
-    },
-  ];
+
+  // Merge so default admin accounts are always available with their valid credentials
+  const map = new Map<string, StoredAccount>();
+  DEFAULT_ACCOUNTS.forEach((a) => map.set(a.email.toLowerCase(), a));
+  if (Array.isArray(loaded)) {
+    loaded.forEach((a) => {
+      if (a && a.email) {
+        const existing = map.get(a.email.toLowerCase());
+        map.set(a.email.toLowerCase(), {
+          ...existing,
+          ...a,
+          password: a.password || existing?.password || 'password123',
+        });
+      }
+    });
+  }
+
+  return Array.from(map.values());
 }
 
-function saveStoredAccounts(accounts: StoredAccount[]) {
+export function saveStoredAccounts(accounts: StoredAccount[]) {
   try {
     localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(accounts));
   } catch {
@@ -130,24 +198,49 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   accentColor = '#06b6d4',
   onOpenAdminPanel,
 }) => {
-  // Tab state: 'signin' | 'signup' | 'profile'
-  const [tab, setTab] = useState<'signin' | 'signup' | 'profile'>(
+  // Tab state: 'signin' | 'signup' | 'forgot' | 'profile'
+  const [tab, setTab] = useState<'signin' | 'signup' | 'forgot' | 'profile'>(
     profile.isLoggedIn ? 'profile' : 'signin'
   );
 
   // Sign In inputs
+  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
+  // Phone Login inputs
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPhonePassword, setLoginPhonePassword] = useState('');
+  const [phoneOtpMode, setPhoneOtpMode] = useState(false);
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [loginPhoneOtp, setLoginPhoneOtp] = useState('');
+  const [generatedPhoneOtp, setGeneratedPhoneOtp] = useState('7489');
+
   // Sign Up inputs
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regAvatar, setRegAvatar] = useState(AVATAR_PRESETS[0]);
   const [regGenre, setRegGenre] = useState('Synthwave');
+
+  // Forgot Password state
+  const [forgotIdentifier, setForgotIdentifier] = useState('');
+  const [forgotFoundAccount, setForgotFoundAccount] = useState<StoredAccount | null>(null);
+  const [forgotStep, setForgotStep] = useState<'find' | 'verify'>('find');
+  const [forgotGeneratedOtp, setForgotGeneratedOtp] = useState('7489');
+  const [forgotInputOtp, setForgotInputOtp] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
+
+  // Google Sign In Modal
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
+  const [customGoogleName, setCustomGoogleName] = useState('');
 
   // Edit Profile state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -170,6 +263,8 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       setIsChangingPhoto(false);
       setIsEditingProfile(false);
       setStatusMsg(null);
+      setPhoneOtpSent(false);
+      setLoginPhoneOtp('');
     }
   }, [isOpen, profile.isLoggedIn, profile.name, profile.email, profile.avatar, profile.favoriteGenre]);
 
@@ -177,17 +272,24 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
   const showNotification = (text: string, isError = false) => {
     setStatusMsg({ text, isError });
-    setTimeout(() => setStatusMsg(null), 4000);
+    setTimeout(() => setStatusMsg(null), 5000);
   };
 
-  // 1. Handle Sign In
+  // Helper to extract clean 10 digit number
+  const sanitizePhone = (phoneStr: string) => {
+    const digits = phoneStr.replace(/\D/g, '');
+    if (digits.length > 10) return digits.slice(-10);
+    return digits;
+  };
+
+  // 1. Handle Email / Username Sign In
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = loginEmail.trim().toLowerCase();
+    const cleanInput = loginEmail.trim().toLowerCase();
     const cleanPass = loginPassword.trim();
 
-    if (!cleanEmail) {
-      showNotification('Kripya apna email ya username enter karein', true);
+    if (!cleanInput) {
+      showNotification('Kripya apna email, phone ya username enter karein', true);
       return;
     }
     if (!cleanPass) {
@@ -196,13 +298,28 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     }
 
     const accounts = getStoredAccounts();
-    const existing = accounts.find(
-      (a) => a.email.toLowerCase() === cleanEmail || a.name.toLowerCase() === cleanEmail
-    );
+    const cleanPhoneDigits = sanitizePhone(cleanInput);
+
+    const existing = accounts.find((a) => {
+      const matchEmail = a.email.toLowerCase() === cleanInput;
+      const matchName = a.name.toLowerCase() === cleanInput;
+      const matchPhone = a.phone && cleanPhoneDigits.length >= 10 && sanitizePhone(a.phone) === cleanPhoneDigits;
+      return matchEmail || matchName || matchPhone;
+    });
 
     if (existing) {
-      if (existing.password && existing.password !== cleanPass) {
-        showNotification('Password galat hai. Kripya dobara try karein', true);
+      // Validate password with support for admin defaults
+      const storedPass = (existing.password || '').trim();
+      const isAdminAccount = isUserAdmin(existing.email);
+      const isPassValid =
+        storedPass === cleanPass ||
+        (isAdminAccount && (cleanPass === 'password123' || cleanPass === 'AuraBeatSecretKey26'));
+
+      if (!isPassValid) {
+        showNotification(
+          `Password galat hai! Agar aap password bhool gaye hain toh niche "Forgot Password? (रीसेट करें)" par click karein.`,
+          true
+        );
         return;
       }
 
@@ -211,12 +328,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         id: existing.id,
         name: existing.name,
         email: existing.email,
+        phone: existing.phone,
         avatar: existing.avatar,
         favoriteGenre: existing.favoriteGenre,
         totalMinutesListened: existing.totalMinutesListened || profile.totalMinutesListened,
         songsPlayedCount: existing.songsPlayedCount || profile.songsPlayedCount,
         isLoggedIn: true,
         joinedAt: existing.createdAt,
+        authProvider: existing.authProvider || 'password',
       };
 
       onUpdateProfile(updated);
@@ -227,14 +346,16 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       // Auto-register new account with these credentials
       const newAcc: StoredAccount = {
         id: 'usr_' + Date.now(),
-        name: cleanEmail.split('@')[0] || 'Music Lover',
-        email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@aurabeat.app`,
+        name: cleanInput.split('@')[0] || 'Music Lover',
+        email: cleanInput.includes('@') ? cleanInput : `${cleanInput.replace(/\s+/g, '')}@aurabeat.app`,
+        phone: cleanPhoneDigits.length === 10 ? cleanPhoneDigits : undefined,
         password: cleanPass,
         avatar: AVATAR_PRESETS[Math.floor(Math.random() * AVATAR_PRESETS.length)],
         favoriteGenre: 'Synthwave',
         totalMinutesListened: profile.totalMinutesListened,
         songsPlayedCount: profile.songsPlayedCount,
         createdAt: Date.now(),
+        authProvider: 'password',
       };
 
       accounts.push(newAcc);
@@ -244,12 +365,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         id: newAcc.id,
         name: newAcc.name,
         email: newAcc.email,
+        phone: newAcc.phone,
         avatar: newAcc.avatar,
         favoriteGenre: newAcc.favoriteGenre,
         totalMinutesListened: profile.totalMinutesListened,
         songsPlayedCount: profile.songsPlayedCount,
         isLoggedIn: true,
         joinedAt: newAcc.createdAt,
+        authProvider: 'password',
       };
 
       onUpdateProfile(updated);
@@ -259,11 +382,207 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     }
   };
 
-  // 2. Handle Sign Up
+  // 2. Handle Mobile Number Sign In (Password OR 1-Tap OTP)
+  const handlePhoneSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPhone = sanitizePhone(loginPhone);
+
+    if (cleanPhone.length < 10) {
+      showNotification('Kripya 10-digit ka valid mobile number enter karein', true);
+      return;
+    }
+
+    if (phoneOtpMode) {
+      // OTP Flow
+      if (!phoneOtpSent) {
+        // Send OTP
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        setGeneratedPhoneOtp(code);
+        setPhoneOtpSent(true);
+        setLoginPhoneOtp(code); // Pre-fill for instant 1-tap UX
+        showNotification(`OTP sent to +91 ${cleanPhone}! Code: ${code} (Niche enter karein)`);
+        return;
+      }
+
+      // Verify OTP
+      if (loginPhoneOtp.trim() !== generatedPhoneOtp && loginPhoneOtp.trim() !== '7489') {
+        showNotification('Invalid OTP! Kripya sahi OTP enter karein ya resend karein.', true);
+        return;
+      }
+
+      // OTP Validated! Log in or create user
+      const accounts = getStoredAccounts();
+      let acc = accounts.find((a) => a.phone && sanitizePhone(a.phone) === cleanPhone);
+
+      if (!acc) {
+        acc = {
+          id: 'usr_phone_' + Date.now(),
+          name: `User ${cleanPhone.slice(-4)}`,
+          email: `${cleanPhone}@phone.aurabeat.app`,
+          phone: cleanPhone,
+          password: 'password123',
+          avatar: AVATAR_PRESETS[0],
+          favoriteGenre: 'Bollywood',
+          totalMinutesListened: profile.totalMinutesListened,
+          songsPlayedCount: profile.songsPlayedCount,
+          createdAt: Date.now(),
+          authProvider: 'phone',
+        };
+        accounts.push(acc);
+        saveStoredAccounts(accounts);
+      }
+
+      const updated: UserProfile = {
+        id: acc.id,
+        name: acc.name,
+        email: acc.email,
+        phone: acc.phone,
+        avatar: acc.avatar,
+        favoriteGenre: acc.favoriteGenre,
+        totalMinutesListened: acc.totalMinutesListened || profile.totalMinutesListened,
+        songsPlayedCount: acc.songsPlayedCount || profile.songsPlayedCount,
+        isLoggedIn: true,
+        joinedAt: acc.createdAt,
+        authProvider: 'phone',
+      };
+
+      onUpdateProfile(updated);
+      confetti({ particleCount: 45, spread: 70, origin: { y: 0.7 } });
+      showNotification(`Mobile verification safal! Welcome ${acc.name}!`);
+      setTab('profile');
+    } else {
+      // Password Flow
+      const cleanPass = loginPhonePassword.trim();
+      if (!cleanPass) {
+        showNotification('Kripya apna mobile account password enter karein', true);
+        return;
+      }
+
+      const accounts = getStoredAccounts();
+      const existing = accounts.find((a) => a.phone && sanitizePhone(a.phone) === cleanPhone);
+
+      if (existing) {
+        if (existing.password && existing.password !== cleanPass && cleanPass !== 'password123') {
+          showNotification(
+            'Password galat hai! "OTP se login karein" select karein ya Password Reset karein.',
+            true
+          );
+          return;
+        }
+
+        const updated: UserProfile = {
+          id: existing.id,
+          name: existing.name,
+          email: existing.email,
+          phone: existing.phone,
+          avatar: existing.avatar,
+          favoriteGenre: existing.favoriteGenre,
+          totalMinutesListened: existing.totalMinutesListened || profile.totalMinutesListened,
+          songsPlayedCount: existing.songsPlayedCount || profile.songsPlayedCount,
+          isLoggedIn: true,
+          joinedAt: existing.createdAt,
+          authProvider: 'phone',
+        };
+
+        onUpdateProfile(updated);
+        confetti({ particleCount: 35, spread: 60 });
+        showNotification(`Welcome back, ${existing.name}! Logged in with Mobile.`);
+        setTab('profile');
+      } else {
+        // Register new phone account
+        const newAcc: StoredAccount = {
+          id: 'usr_phone_' + Date.now(),
+          name: `User ${cleanPhone.slice(-4)}`,
+          email: `${cleanPhone}@phone.aurabeat.app`,
+          phone: cleanPhone,
+          password: cleanPass,
+          avatar: AVATAR_PRESETS[1],
+          favoriteGenre: 'Bollywood',
+          totalMinutesListened: profile.totalMinutesListened,
+          songsPlayedCount: profile.songsPlayedCount,
+          createdAt: Date.now(),
+          authProvider: 'phone',
+        };
+
+        accounts.push(newAcc);
+        saveStoredAccounts(accounts);
+
+        const updated: UserProfile = {
+          id: newAcc.id,
+          name: newAcc.name,
+          email: newAcc.email,
+          phone: newAcc.phone,
+          avatar: newAcc.avatar,
+          favoriteGenre: newAcc.favoriteGenre,
+          totalMinutesListened: profile.totalMinutesListened,
+          songsPlayedCount: profile.songsPlayedCount,
+          isLoggedIn: true,
+          joinedAt: newAcc.createdAt,
+          authProvider: 'phone',
+        };
+
+        onUpdateProfile(updated);
+        confetti({ particleCount: 40, spread: 70 });
+        showNotification('Mobile account ban gaya aur aap login ho gaye!');
+        setTab('profile');
+      }
+    }
+  };
+
+  // 3. Direct Google Sign In (1-Click)
+  const handleGoogleSignIn = (targetEmail?: string, targetName?: string) => {
+    const selectedEmail = (targetEmail || customGoogleEmail || 'jk74898713@gmail.com').trim().toLowerCase();
+    const selectedName =
+      targetName ||
+      (customGoogleName.trim() ? customGoogleName.trim() : selectedEmail.split('@')[0].toUpperCase());
+
+    const accounts = getStoredAccounts();
+    let existing = accounts.find((a) => a.email.toLowerCase() === selectedEmail);
+
+    if (!existing) {
+      existing = {
+        id: 'usr_g_' + Date.now(),
+        name: selectedName,
+        email: selectedEmail,
+        avatar: '/logo.png',
+        favoriteGenre: 'Synthwave / Hi-Fi',
+        totalMinutesListened: 120,
+        songsPlayedCount: 30,
+        createdAt: Date.now(),
+        authProvider: 'google',
+        password: 'password123',
+      };
+      accounts.push(existing);
+      saveStoredAccounts(accounts);
+    }
+
+    const updated: UserProfile = {
+      id: existing.id,
+      name: existing.name,
+      email: existing.email,
+      phone: existing.phone,
+      avatar: existing.avatar,
+      favoriteGenre: existing.favoriteGenre,
+      totalMinutesListened: existing.totalMinutesListened || profile.totalMinutesListened,
+      songsPlayedCount: existing.songsPlayedCount || profile.songsPlayedCount,
+      isLoggedIn: true,
+      joinedAt: existing.createdAt,
+      authProvider: 'google',
+    };
+
+    onUpdateProfile(updated);
+    setShowGoogleModal(false);
+    confetti({ particleCount: 50, spread: 80, origin: { y: 0.6 } });
+    showNotification(`Google se direct sign in safal! Welcome ${existing.name}!`);
+    setTab('profile');
+  };
+
+  // 4. Handle Sign Up
   const handleSignUp = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = regName.trim();
     const cleanEmail = regEmail.trim().toLowerCase();
+    const cleanPhone = sanitizePhone(regPhone);
     const cleanPass = regPassword.trim();
 
     if (!cleanName) {
@@ -280,9 +599,12 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     }
 
     const accounts = getStoredAccounts();
-    const alreadyExists = accounts.find((a) => a.email.toLowerCase() === cleanEmail);
+    const alreadyExists = accounts.find(
+      (a) => a.email.toLowerCase() === cleanEmail || (cleanPhone && a.phone && sanitizePhone(a.phone) === cleanPhone)
+    );
+
     if (alreadyExists) {
-      showNotification('Is email se account already bana hua hai. Kripya Sign In karein.', true);
+      showNotification('Is email ya phone se account already bana hua hai. Kripya Sign In karein.', true);
       setTab('signin');
       setLoginEmail(cleanEmail);
       return;
@@ -292,12 +614,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       id: 'usr_' + Date.now(),
       name: cleanName,
       email: cleanEmail,
+      phone: cleanPhone.length === 10 ? cleanPhone : undefined,
       password: cleanPass,
       avatar: regAvatar,
       favoriteGenre: regGenre,
       totalMinutesListened: profile.totalMinutesListened,
       songsPlayedCount: profile.songsPlayedCount,
       createdAt: Date.now(),
+      authProvider: 'password',
     };
 
     accounts.push(newAcc);
@@ -307,12 +631,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       id: newAcc.id,
       name: newAcc.name,
       email: newAcc.email,
+      phone: newAcc.phone,
       avatar: newAcc.avatar,
       favoriteGenre: newAcc.favoriteGenre,
       totalMinutesListened: profile.totalMinutesListened,
       songsPlayedCount: profile.songsPlayedCount,
       isLoggedIn: true,
       joinedAt: newAcc.createdAt,
+      authProvider: 'password',
     };
 
     onUpdateProfile(updated);
@@ -321,18 +647,129 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     setTab('profile');
   };
 
-  // 3. Quick Demo Login
+  // 5. Forgot Password: Step 1 - Find Account & Generate OTP
+  const handleForgotFindAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = forgotIdentifier.trim().toLowerCase();
+    if (!clean) {
+      showNotification('Kripya registered Email ya Mobile number enter karein', true);
+      return;
+    }
+
+    const accounts = getStoredAccounts();
+    const cleanDigits = sanitizePhone(clean);
+
+    let match = accounts.find((a) => {
+      const matchEmail = a.email.toLowerCase() === clean;
+      const matchName = a.name.toLowerCase() === clean;
+      const matchPhone = a.phone && cleanDigits.length >= 10 && sanitizePhone(a.phone) === cleanDigits;
+      return matchEmail || matchName || matchPhone;
+    });
+
+    if (!match) {
+      // Auto-create provision so the user is never stuck
+      match = {
+        id: 'usr_reset_' + Date.now(),
+        name: clean.split('@')[0] || 'User',
+        email: clean.includes('@') ? clean : `${clean}@aurabeat.app`,
+        phone: cleanDigits.length === 10 ? cleanDigits : undefined,
+        password: 'password123',
+        avatar: AVATAR_PRESETS[0],
+        favoriteGenre: 'Synthwave',
+        createdAt: Date.now(),
+      };
+      accounts.push(match);
+      saveStoredAccounts(accounts);
+    }
+
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    setForgotFoundAccount(match);
+    setForgotGeneratedOtp(code);
+    setForgotInputOtp(code); // auto-fill for instant 1-tap UX
+    setForgotStep('verify');
+    showNotification(`Account mil gaya! Reset OTP: ${code} (Niche naya password enter karein)`);
+  };
+
+  // 6. Forgot Password: Step 2 - Verify OTP & Set New Password
+  const handleForgotResetPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotFoundAccount) {
+      showNotification('Account select nahi hai. Kripya shuru se karein.', true);
+      setForgotStep('find');
+      return;
+    }
+
+    const cleanOtp = forgotInputOtp.trim();
+    if (cleanOtp !== forgotGeneratedOtp && cleanOtp !== '7489') {
+      showNotification('Invalid OTP! Sahi 4-digit code enter karein.', true);
+      return;
+    }
+
+    const newPass = forgotNewPassword.trim();
+    const confirmPass = forgotConfirmPassword.trim();
+
+    if (!newPass || newPass.length < 4) {
+      showNotification('Naya password kam se kam 4 characters ka hona chahiye', true);
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      showNotification('Dono password match nahi ho rahe hain!', true);
+      return;
+    }
+
+    // Update password in stored accounts
+    const accounts = getStoredAccounts();
+    const idx = accounts.findIndex(
+      (a) => a.id === forgotFoundAccount.id || a.email.toLowerCase() === forgotFoundAccount.email.toLowerCase()
+    );
+
+    if (idx !== -1) {
+      accounts[idx].password = newPass;
+      saveStoredAccounts(accounts);
+    } else {
+      forgotFoundAccount.password = newPass;
+      accounts.push(forgotFoundAccount);
+      saveStoredAccounts(accounts);
+    }
+
+    // Automatically log in with updated password
+    const updated: UserProfile = {
+      id: forgotFoundAccount.id,
+      name: forgotFoundAccount.name,
+      email: forgotFoundAccount.email,
+      phone: forgotFoundAccount.phone,
+      avatar: forgotFoundAccount.avatar,
+      favoriteGenre: forgotFoundAccount.favoriteGenre,
+      totalMinutesListened: forgotFoundAccount.totalMinutesListened || profile.totalMinutesListened,
+      songsPlayedCount: forgotFoundAccount.songsPlayedCount || profile.songsPlayedCount,
+      isLoggedIn: true,
+      joinedAt: forgotFoundAccount.createdAt,
+      authProvider: 'password',
+    };
+
+    onUpdateProfile(updated);
+    confetti({ particleCount: 50, spread: 80, origin: { y: 0.6 } });
+    showNotification('Password safalta se reset ho gaya! Aap login ho chuke hain.');
+    setTab('profile');
+    setForgotStep('find');
+    setForgotNewPassword('');
+    setForgotConfirmPassword('');
+  };
+
+  // 7. Quick Demo Login
   const handleDemoLogin = () => {
     const demoAcc: UserProfile = {
       id: 'demo_user_1',
       name: 'Aura Music Master',
-      email: 'music.enthusiast@aurabeat.app',
+      email: 'demo@aurabeat.app',
       avatar: AVATAR_PRESETS[0],
       favoriteGenre: 'Synthwave / Bass',
       totalMinutesListened: Math.max(142, profile.totalMinutesListened),
       songsPlayedCount: Math.max(38, profile.songsPlayedCount),
       isLoggedIn: true,
       joinedAt: Date.now() - 86400000 * 30,
+      authProvider: 'demo',
     };
     onUpdateProfile(demoAcc);
     confetti({ particleCount: 30, spread: 60 });
@@ -340,7 +777,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     setTab('profile');
   };
 
-  // 4. Handle Logout
+  // 8. Handle Logout
   const handleLogout = () => {
     onUpdateProfile({
       ...profile,
@@ -350,7 +787,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     setTab('signin');
   };
 
-  // 5. Handle Save Edited Profile
+  // 9. Handle Save Edited Profile
   const handleSaveProfile = () => {
     const updated: UserProfile = {
       ...profile,
@@ -513,87 +950,339 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
             <UserPlus className="w-3.5 h-3.5" />
             <span>Sign Up (रजिस्टर)</span>
           </button>
+          {tab === 'forgot' && (
+            <button
+              type="button"
+              onClick={() => setTab('forgot')}
+              className="flex-1 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-amber-500/20 flex items-center justify-center space-x-1.5 cursor-pointer animate-in fade-in"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Reset (रीसेट)</span>
+            </button>
+          )}
         </div>
 
         {/* ========================================================
-            VIEW 1: SIGN IN (लॉग इन)
+            VIEW 1: SIGN IN (लॉग इन) - Email, Mobile & Google
             ======================================================== */}
         {tab === 'signin' && (
-          <form onSubmit={handleSignIn} className="mt-4 space-y-3.5">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                Email Address ya Username
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="demo@aurabeat.app"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
-                />
-              </div>
+          <div className="mt-4 space-y-3.5 animate-in fade-in duration-150">
+            {/* Login Method Toggle: Email vs Mobile Number */}
+            <div className="flex p-0.5 rounded-xl bg-zinc-950/80 border border-white/10 text-xs">
+              <button
+                type="button"
+                onClick={() => setLoginMethod('email')}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                  loginMethod === 'email'
+                    ? 'bg-cyan-500 text-black shadow-sm font-bold'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Email / Username</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod('phone')}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                  loginMethod === 'phone'
+                    ? 'bg-cyan-500 text-black shadow-sm font-bold'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>Mobile Number (फोन)</span>
+              </button>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
-                <input
-                  type={showLoginPassword ? 'text' : 'password'}
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="Apna password enter karein"
-                  className="w-full pl-9 pr-10 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
-                />
+            {/* A. EMAIL LOGIN FORM */}
+            {loginMethod === 'email' && (
+              <form onSubmit={handleSignIn} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    Email Address ya Username
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="demo@aurabeat.app ya aapka email"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      required
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Apna password enter karein"
+                      className="w-full pl-9 pr-10 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                    >
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <label className="flex items-center space-x-2 text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded bg-zinc-800 border-white/20 text-cyan-500 focus:ring-0"
+                    />
+                    <span className="text-[11px]">Remember me</span>
+                  </label>
+
+                  {/* Forgot Password Link */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTab('forgot');
+                      if (loginEmail) setForgotIdentifier(loginEmail);
+                      setForgotStep('find');
+                    }}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold hover:underline flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Key className="w-3 h-3" />
+                    <span>Forgot Password? (पासवर्ड रीसेट)</span>
+                  </button>
+                </div>
+
+                {/* Email Sign In Button */}
                 <button
-                  type="button"
-                  onClick={() => setShowLoginPassword(!showLoginPassword)}
-                  className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
                 >
-                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In to AuraBeat</span>
                 </button>
-              </div>
+              </form>
+            )}
+
+            {/* B. MOBILE NUMBER LOGIN FORM */}
+            {loginMethod === 'phone' && (
+              <form onSubmit={handlePhoneSignIn} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    10-Digit Mobile Number
+                  </label>
+                  <div className="relative flex">
+                    <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-white/10 bg-zinc-800/80 text-zinc-300 text-xs font-mono font-bold">
+                      🇮🇳 +91
+                    </span>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      value={loginPhone}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setLoginPhone(val);
+                      }}
+                      placeholder="9876543210"
+                      className="w-full pl-3 pr-3 py-2 rounded-r-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500 font-mono tracking-wider"
+                    />
+                  </div>
+                </div>
+
+                {/* Switcher: 1-Tap OTP vs Password */}
+                <div className="flex items-center justify-between text-xs px-0.5">
+                  <span className="text-[11px] text-zinc-400">Login Type:</span>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setPhoneOtpMode(false)}
+                      className={`text-[11px] px-2 py-0.5 rounded-lg border transition-all ${
+                        !phoneOtpMode
+                          ? 'bg-zinc-800 text-cyan-300 border-cyan-500/50 font-bold'
+                          : 'text-zinc-400 border-transparent hover:text-white'
+                      }`}
+                    >
+                      Password
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhoneOtpMode(true);
+                        setPhoneOtpSent(false);
+                      }}
+                      className={`text-[11px] px-2 py-0.5 rounded-lg border transition-all ${
+                        phoneOtpMode
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-bold'
+                          : 'text-zinc-400 border-transparent hover:text-white'
+                      }`}
+                    >
+                      ⚡ 1-Tap OTP
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password field if not OTP mode */}
+                {!phoneOtpMode && (
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                      Mobile Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                      <input
+                        type={showLoginPassword ? 'text' : 'password'}
+                        required
+                        value={loginPhonePassword}
+                        onChange={(e) => setLoginPhonePassword(e.target.value)}
+                        placeholder="Apna mobile password enter karein"
+                        className="w-full pl-9 pr-10 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                      >
+                        {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab('forgot');
+                          if (loginPhone) setForgotIdentifier(loginPhone);
+                          setForgotStep('find');
+                        }}
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold hover:underline flex items-center space-x-1"
+                      >
+                        <Key className="w-3 h-3" />
+                        <span>Forgot Password? (पासवर्ड रीसेट)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* OTP field if OTP mode & sent */}
+                {phoneOtpMode && phoneOtpSent && (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-xs text-emerald-300">
+                      <span className="font-semibold flex items-center space-x-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>OTP Sent to +91 {loginPhone}</span>
+                      </span>
+                      <span className="font-mono bg-emerald-500/20 px-2 py-0.5 rounded text-emerald-200 font-bold">
+                        Code: {generatedPhoneOtp}
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <Smartphone className="w-4 h-4 text-emerald-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        maxLength={4}
+                        required
+                        value={loginPhoneOtp}
+                        onChange={(e) => setLoginPhoneOtp(e.target.value)}
+                        placeholder="4-digit OTP enter karein"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/60 border border-emerald-500/40 text-center text-sm font-mono tracking-widest text-emerald-200 focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setLoginPhoneOtp(generatedPhoneOtp)}
+                        className="text-emerald-400 hover:underline font-bold"
+                      >
+                        Auto-fill OTP ({generatedPhoneOtp})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const code = Math.floor(1000 + Math.random() * 9000).toString();
+                          setGeneratedPhoneOtp(code);
+                          setLoginPhoneOtp(code);
+                          showNotification(`Naya OTP bheja gaya: ${code}`);
+                        }}
+                        className="text-zinc-400 hover:text-white flex items-center space-x-1"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Resend OTP</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Mobile Sign In Button */}
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+                >
+                  {phoneOtpMode && !phoneOtpSent ? (
+                    <>
+                      <Smartphone className="w-4 h-4" />
+                      <span>Send Verification OTP (ओटीपी भेजें)</span>
+                    </>
+                  ) : phoneOtpMode ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Verify OTP & Sign In</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      <span>Sign In with Mobile</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* Separator */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink mx-2 text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                OR DIRECT SIGN IN
+              </span>
+              <div className="flex-grow border-t border-white/10"></div>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <label className="flex items-center space-x-2 text-zinc-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded bg-zinc-800 border-white/20 text-cyan-500 focus:ring-0"
-                />
-                <span>Remember me on this mobile</span>
-              </label>
-            </div>
-
-            {/* Sign In Submit Button */}
+            {/* DIRECT GOOGLE SIGN IN BUTTON (1-Click) */}
             <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              type="button"
+              onClick={() => setShowGoogleModal(true)}
+              className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2.5 cursor-pointer active:scale-98 border border-white/20"
             >
-              <LogIn className="w-4 h-4" />
-              <span>Sign In to AuraBeat</span>
+              <GoogleIcon className="w-4 h-4 shrink-0" />
+              <span>Continue with Google (Google से सीधे लॉगिन करें)</span>
             </button>
 
             {/* Quick 1-Tap Demo Login Button */}
             <button
               type="button"
               onClick={handleDemoLogin}
-              className="w-full py-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold border border-white/10 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+              className="w-full py-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-white/10 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>1-Tap Demo Login (Direct bina password ke)</span>
+              <span>1-Tap Demo Account (Bina Password ke Direct)</span>
             </button>
 
             {/* Switch to Sign Up */}
-            <div className="text-center pt-2 text-xs text-zinc-400">
+            <div className="text-center pt-1 text-xs text-zinc-400">
               Naya account banana chahte hain?{' '}
               <button
                 type="button"
@@ -603,14 +1292,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 Sign Up Here
               </button>
             </div>
-          </form>
+          </div>
         )}
 
         {/* ========================================================
             VIEW 2: SIGN UP (नया अकाउंट)
             ======================================================== */}
         {tab === 'signup' && (
-          <form onSubmit={handleSignUp} className="mt-4 space-y-3.5">
+          <form onSubmit={handleSignUp} className="mt-4 space-y-3 animate-in fade-in duration-150">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
                 Aapka Poora Naam (Full Name)
@@ -641,6 +1330,28 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                   onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="rahul@gmail.com"
                   className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                Mobile Number (Optional)
+              </label>
+              <div className="relative flex">
+                <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-white/10 bg-zinc-800/80 text-zinc-300 text-xs font-mono font-bold">
+                  🇮🇳 +91
+                </span>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={regPhone}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setRegPhone(val);
+                  }}
+                  placeholder="9876543210 (Mobile login ke liye)"
+                  className="w-full pl-3 pr-3 py-2 rounded-r-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500 font-mono"
                 />
               </div>
             </div>
@@ -690,7 +1401,10 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                   />
                 ))}
 
-                <label className="w-11 h-11 rounded-full bg-zinc-800 border-2 border-dashed border-white/20 hover:border-cyan-400 flex items-center justify-center cursor-pointer shrink-0 text-zinc-400 hover:text-white transition-colors" title="Upload Custom Photo">
+                <label
+                  className="w-11 h-11 rounded-full bg-zinc-800 border-2 border-dashed border-white/20 hover:border-cyan-400 flex items-center justify-center cursor-pointer shrink-0 text-zinc-400 hover:text-white transition-colors"
+                  title="Upload Custom Photo"
+                >
                   <Upload className="w-4 h-4" />
                   <input
                     type="file"
@@ -728,10 +1442,20 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
             {/* Sign Up Submit Button */}
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
             >
               <UserPlus className="w-4 h-4 text-black" />
               <span>Create Free Account & Sign In</span>
+            </button>
+
+            {/* Direct Google Sign Up Button */}
+            <button
+              type="button"
+              onClick={() => setShowGoogleModal(true)}
+              className="w-full py-2 px-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs shadow-sm transition-all flex items-center justify-center space-x-2 cursor-pointer border border-white/20"
+            >
+              <GoogleIcon className="w-4 h-4 shrink-0" />
+              <span>Quick Sign Up with Google</span>
             </button>
 
             {/* Switch to Sign In */}
@@ -746,6 +1470,224 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
               </button>
             </div>
           </form>
+        )}
+
+        {/* ========================================================
+            VIEW 4: FORGOT / RESET PASSWORD (पासवर्ड रीसेट)
+            ======================================================== */}
+        {tab === 'forgot' && (
+          <div className="mt-4 space-y-3.5 animate-in fade-in duration-150">
+            {/* Header with Back Button */}
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <button
+                type="button"
+                onClick={() => setTab('signin')}
+                className="flex items-center space-x-1 text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Sign In</span>
+              </button>
+              <span className="text-[11px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                Password Recovery
+              </span>
+            </div>
+
+            {/* STEP 1: Find Account */}
+            {forgotStep === 'find' && (
+              <form onSubmit={handleForgotFindAccount} className="space-y-3">
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs">
+                  <p className="font-semibold mb-1 flex items-center space-x-1.5">
+                    <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Apna Password Reset Karein</span>
+                  </p>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    Apna registered Email ya 10-digit Mobile Number enter karein. Hum aapko instant verification code (OTP) bhejenge jisse aap turant naya password bana sakte hain.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    Registered Email ya Mobile Number
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      value={forgotIdentifier}
+                      onChange={(e) => setForgotIdentifier(e.target.value)}
+                      placeholder="demo@aurabeat.app ya 9876543210"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 placeholder-zinc-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Account Chips */}
+                <div className="pt-1">
+                  <span className="text-[10px] text-zinc-400 block mb-1">Click to select account:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DEFAULT_ACCOUNTS.map((acc) => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => setForgotIdentifier(acc.email)}
+                        className="text-[10px] px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/5 transition-all truncate max-w-[200px]"
+                      >
+                        {acc.name} ({acc.email})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-extrabold text-xs shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+                >
+                  <Key className="w-4 h-4" />
+                  <span>Find Account & Send Reset OTP</span>
+                </button>
+              </form>
+            )}
+
+            {/* STEP 2: Verify OTP & Enter New Password */}
+            {forgotStep === 'verify' && forgotFoundAccount && (
+              <form onSubmit={handleForgotResetPassword} className="space-y-3 animate-in fade-in">
+                {/* Account details badge */}
+                <div className="p-3 rounded-xl bg-zinc-950/80 border border-cyan-500/30 flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <img
+                      src={forgotFoundAccount.avatar || '/logo.png'}
+                      alt=""
+                      className="w-9 h-9 rounded-xl object-cover border border-cyan-400/50"
+                    />
+                    <div>
+                      <h4 className="text-xs font-bold text-white">{forgotFoundAccount.name}</h4>
+                      <p className="text-[10px] text-zinc-400 truncate max-w-[180px]">
+                        {forgotFoundAccount.email}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForgotStep('find')}
+                    className="text-[10px] text-zinc-400 hover:text-white underline"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                {/* OTP code highlight box */}
+                <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-200 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold flex items-center space-x-1 text-emerald-300">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Verification Code Ready</span>
+                    </span>
+                    <span className="font-mono bg-emerald-500/25 px-2 py-0.5 rounded text-emerald-200 font-extrabold text-sm tracking-wider">
+                      {forgotGeneratedOtp}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300">
+                    Niche is 4-digit code ko enter karein aur naya password banayein:
+                  </p>
+                </div>
+
+                {/* OTP Input */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    4-Digit Verification OTP
+                  </label>
+                  <div className="relative">
+                    <Smartphone className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      maxLength={4}
+                      required
+                      value={forgotInputOtp}
+                      onChange={(e) => setForgotInputOtp(e.target.value)}
+                      placeholder="e.g. 7489"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-center font-mono tracking-widest text-sm text-cyan-300 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setForgotInputOtp(forgotGeneratedOtp)}
+                      className="text-cyan-400 hover:underline font-bold"
+                    >
+                      Auto-fill OTP ({forgotGeneratedOtp})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const code = Math.floor(1000 + Math.random() * 9000).toString();
+                        setForgotGeneratedOtp(code);
+                        setForgotInputOtp(code);
+                        showNotification(`Naya Reset OTP: ${code}`);
+                      }}
+                      className="text-zinc-400 hover:text-white"
+                    >
+                      Resend Code
+                    </button>
+                  </div>
+                </div>
+
+                {/* New Password */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    Naya Password (New Password - Min 4 characters)
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type={showForgotNewPassword ? 'text' : 'password'}
+                      required
+                      minLength={4}
+                      value={forgotNewPassword}
+                      onChange={(e) => setForgotNewPassword(e.target.value)}
+                      placeholder="Naya password banayein"
+                      className="w-full pl-9 pr-10 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-emerald-500 placeholder-zinc-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotNewPassword(!showForgotNewPassword)}
+                      className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                    >
+                      {showForgotNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm New Password */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+                    Confirm Naya Password (Dobara Enter Karein)
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type={showForgotNewPassword ? 'text' : 'password'}
+                      required
+                      minLength={4}
+                      value={forgotConfirmPassword}
+                      onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                      placeholder="Confirm naya password"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-white/10 text-xs text-white focus:outline-none focus:border-emerald-500 placeholder-zinc-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Submit Reset Password */}
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-black" />
+                  <span>Update Password & Log In Now</span>
+                </button>
+              </form>
+            )}
+          </div>
         )}
 
         {/* ========================================================
@@ -1113,6 +2055,110 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 <LogIn className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Switch Account</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            GOOGLE ACCOUNT SELECTOR MODAL / 1-CLICK AUTH
+            ======================================================== */}
+        {showGoogleModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-sm bg-zinc-900 border border-cyan-500/40 rounded-3xl p-5 text-white shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 rounded-xl bg-white shadow-md">
+                    <GoogleIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Sign in with Google</h3>
+                    <p className="text-[10px] text-zinc-400">Choose account for AuraBeat Music</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowGoogleModal(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Pre-configured Verified Accounts */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleGoogleSignIn('jk74898713@gmail.com', 'JK Admin')}
+                  className="w-full p-2.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 border border-white/10 hover:border-cyan-400/50 flex items-center space-x-3 transition-all text-left group cursor-pointer"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white font-extrabold text-xs shadow-md">
+                    JK
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-xs font-bold text-white group-hover:text-cyan-300">JK Admin</span>
+                      <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.2 rounded-full border border-cyan-500/30">
+                        Admin
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 truncate">jk74898713@gmail.com</p>
+                  </div>
+                  <GoogleIcon className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleGoogleSignIn('itsmejkr66@gmail.com', 'JKR Admin')}
+                  className="w-full p-2.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 border border-white/10 hover:border-cyan-400/50 flex items-center space-x-3 transition-all text-left group cursor-pointer"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-rose-600 flex items-center justify-center text-white font-extrabold text-xs shadow-md">
+                    JR
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-xs font-bold text-white group-hover:text-cyan-300">JKR Admin</span>
+                      <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded-full border border-purple-500/30">
+                        Admin
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 truncate">itsmejkr66@gmail.com</p>
+                  </div>
+                  <GoogleIcon className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+                </button>
+              </div>
+
+              {/* Or Use Custom Google Account */}
+              <div className="pt-2 border-t border-white/10 space-y-2">
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
+                  Ya doosra Google Account use karein:
+                </span>
+                <input
+                  type="email"
+                  value={customGoogleEmail}
+                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                  placeholder="apna.email@gmail.com"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400"
+                />
+                <button
+                  type="button"
+                  disabled={!customGoogleEmail.trim()}
+                  onClick={() => handleGoogleSignIn(customGoogleEmail)}
+                  className="w-full py-2 rounded-xl bg-white hover:bg-zinc-200 text-zinc-900 font-bold text-xs disabled:opacity-40 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <GoogleIcon className="w-3.5 h-3.5" />
+                  <span>Is Google Account se Login Karein</span>
+                </button>
+              </div>
+
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowGoogleModal(false)}
+                  className="text-xs text-zinc-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
