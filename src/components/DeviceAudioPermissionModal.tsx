@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Song } from '../types';
 import { deviceSyncEngine } from '../utils/deviceSyncEngine';
+import { saveSetting } from '../utils/indexedDB';
 import {
   FolderOpen,
   FolderSearch,
@@ -62,8 +63,11 @@ export const DeviceAudioPermissionModal: React.FC<DeviceAudioPermissionModalProp
       setIsRequesting(false);
 
       if (result.handleObtained) {
-        // PERMISSION GRANTED: Close modal immediately!
-        // Background sync crawls all folders (Music, Downloads, WhatsApp, Recordings, etc.)
+        // PERMISSION GRANTED: Record in persistent storage & close
+        localStorage.setItem('aurabeat_device_sync_granted', 'true');
+        localStorage.setItem('aurabeat_audio_permission_asked', 'true');
+        saveSetting('aurabeat_sync_granted', true).catch(() => {});
+        saveSetting('aurabeat_permission_asked', true).catch(() => {});
         onClose();
         return;
       }
@@ -87,6 +91,10 @@ export const DeviceAudioPermissionModal: React.FC<DeviceAudioPermissionModalProp
     const files = e.target.files;
     if (files && files.length > 0) {
       const filesArray = Array.from(files);
+      localStorage.setItem('aurabeat_device_sync_granted', 'true');
+      localStorage.setItem('aurabeat_audio_permission_asked', 'true');
+      saveSetting('aurabeat_sync_granted', true).catch(() => {});
+      saveSetting('aurabeat_permission_asked', true).catch(() => {});
       deviceSyncEngine.processFilesListInBackground(
         filesArray,
         handleSongDiscovered,
@@ -101,6 +109,7 @@ export const DeviceAudioPermissionModal: React.FC<DeviceAudioPermissionModalProp
 
   const handleSkip = () => {
     localStorage.setItem('aurabeat_audio_permission_asked', 'true');
+    saveSetting('aurabeat_permission_asked', true).catch(() => {});
     onClose();
   };
 

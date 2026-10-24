@@ -141,3 +141,18 @@ html, body, #root {
   transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
 }
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 10s linear infinite;
+  will-change: transform;
+}
+

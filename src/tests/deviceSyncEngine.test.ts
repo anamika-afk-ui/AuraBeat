@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAudioFilename, deviceSyncEngine } from '../utils/deviceSyncEngine';
+import { parseAudioFilename, deviceSyncEngine, isSongDuplicate } from '../utils/deviceSyncEngine';
 
 describe('Device Background Audio Sync Engine', () => {
   it('correctly parses audio filenames into clean title and artist', () => {
@@ -28,5 +28,64 @@ describe('Device Background Audio Sync Engine', () => {
     });
     expect(received).toBe(true);
     unsub();
+  });
+
+  it('strictly prevents duplicate songs with identical name, artist, or album', () => {
+    const existingSongs = [
+      {
+        id: 's1',
+        title: 'Kesariya',
+        artist: 'Arijit Singh',
+        album: 'Brahmastra',
+        duration: 240,
+        url: 'blob:url1',
+        genre: 'Bollywood',
+      },
+      {
+        id: 's2',
+        title: 'Blinding Lights',
+        artist: 'The Weeknd',
+        album: 'After Hours',
+        duration: 200,
+        url: 'blob:url2',
+        genre: 'Pop',
+      },
+    ];
+
+    // Same title, artist, album -> Duplicate
+    expect(
+      isSongDuplicate(existingSongs as any, {
+        title: 'Kesariya',
+        artist: 'Arijit Singh',
+        album: 'Brahmastra',
+      })
+    ).toBe(true);
+
+    // Same title and artist with minor punctuation or casing -> Duplicate
+    expect(
+      isSongDuplicate(existingSongs as any, {
+        title: '01 - Kesariya.mp3',
+        artist: 'Arijit Singh',
+        album: 'Different Album',
+      })
+    ).toBe(true);
+
+    // Exact same song name (title) -> Duplicate per user requirement
+    expect(
+      isSongDuplicate(existingSongs as any, {
+        title: 'Blinding Lights',
+        artist: 'Device Music',
+        album: 'Downloads',
+      })
+    ).toBe(true);
+
+    // Different song -> NOT Duplicate
+    expect(
+      isSongDuplicate(existingSongs as any, {
+        title: 'Starboy',
+        artist: 'The Weeknd',
+        album: 'Starboy',
+      })
+    ).toBe(false);
   });
 });

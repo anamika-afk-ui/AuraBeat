@@ -34,7 +34,7 @@ import { AudioVisualizer } from './components/AudioVisualizer';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { BackgroundSyncIndicator } from './components/BackgroundSyncIndicator';
-import { deviceSyncEngine } from './utils/deviceSyncEngine';
+import { deviceSyncEngine, isSongDuplicate } from './utils/deviceSyncEngine';
 import confetti from 'canvas-confetti';
 import {
   Play,
@@ -211,15 +211,23 @@ export default function App() {
     async function loadData() {
       try {
         const savedSongs = await getAllSavedSongs();
-        const map = new Map<string, Song>();
+        const acceptedSongs: Song[] = [];
 
         // 1. Built-in default tracks (demo songs removed per user request)
-        DEFAULT_SONGS.forEach((s) => map.set(s.id, s));
+        DEFAULT_SONGS.forEach((s) => {
+          if (!isSongDuplicate(acceptedSongs, s)) {
+            acceptedSongs.push(s);
+          }
+        });
 
         // 2. Creator published songs bundled directly into client build (now empty)
-        BUNDLED_PUBLISHED_SONGS.forEach((s) => map.set(s.id, s));
+        BUNDLED_PUBLISHED_SONGS.forEach((s) => {
+          if (!isSongDuplicate(acceptedSongs, s)) {
+            acceptedSongs.push(s);
+          }
+        });
 
-        // 3. User local uploads saved in IndexedDB (clean up old legacy demo songs if present)
+        // 3. User local uploads saved in IndexedDB (clean up old legacy demo songs and purge duplicates)
         if (savedSongs && savedSongs.length > 0) {
           for (const s of savedSongs) {
             // Discard removed demo songs
@@ -234,13 +242,20 @@ export default function App() {
               await deleteSavedSong(s.id).catch(() => {});
               continue;
             }
+
+            // Strictly purge duplicate songs in DB to guarantee single unique songs
+            if (isSongDuplicate(acceptedSongs, s)) {
+              await deleteSavedSong(s.id).catch(() => {});
+              continue;
+            }
+
             try {
               const blob = await getAudioBlob(s.id);
               if (blob) {
                 s.url = URL.createObjectURL(blob);
               }
             } catch {}
-            map.set(s.id, s);
+            acceptedSongs.push(s);
           }
         }
 
@@ -277,15 +292,22 @@ export default function App() {
           }
 
           if (catalogSongs.length > 0) {
-            catalogSongs.forEach((s: Song) => map.set(s.id, s));
+            catalogSongs.forEach((s: Song) => {
+              if (!isSongDuplicate(acceptedSongs, s)) {
+                acceptedSongs.push(s);
+              }
+            });
           }
         } catch {
           // offline
         }
 
-        const baseList = Array.from(map.values());
+        const baseList = acceptedSongs;
         setSongs(baseList);
         setQueue(baseList);
+
+        // Pre-initialize sync engine with all loaded songs so any duplicate during sync is rejected
+        deviceSyncEngine.initKnownSongs(baseList);
 
         // Pre-initialize audio element with the first track so Play button works instantly
         if (audioRef.current && baseList.length > 0 && !audioRef.current.src) {
@@ -309,6 +331,35 @@ export default function App() {
 
         const savedProfile = await getSetting<UserProfile | null>('user_profile', null);
         if (savedProfile) setUserProfile(savedProfile);
+
+        // Check 1-Time Device Audio Sync Setup:
+        // NEVER prompt again if:
+        // - Permission was already granted or asked previously
+        // - User already has songs in IndexedDB (from previous syncs or uploads)
+        const dbGranted = await getSetting<boolean>('aurabeat_sync_granted', false);
+        const dbAsked = await getSetting<boolean>('aurabeat_permission_asked', false);
+        const lsGranted = localStorage.getItem('aurabeat_device_sync_granted') === 'true';
+        const lsAsked = localStorage.getItem('aurabeat_audio_permission_asked') === 'true';
+        const hasExistingSongs = savedSongs && savedSongs.length > 0;
+
+        const alreadyConfigured = dbGranted || lsGranted || dbAsked || lsAsked || hasExistingSongs;
+
+        if (alreadyConfigured) {
+          // User already set up or has songs! NEVER ask again on launch.
+          // Quietly auto-sync in the background if directory handle is active.
+          if (dbGranted || lsGranted) {
+            deviceSyncEngine.attemptAutoSilentSync((newSong) => {
+              handleSingleDeviceSongFound(newSong);
+            });
+          }
+        } else {
+          // Brand new initial install / clean data state:
+          // Prompt 1-time permission modal, and record that it was prompted
+          setIsFirstTimeAudioPrompt(true);
+          setIsDeviceAudioModalOpen(true);
+          localStorage.setItem('aurabeat_audio_permission_asked', 'true');
+          saveSetting('aurabeat_permission_asked', true).catch(() => {});
+        }
       } catch (err) {
         console.error('Error loading initial data from IndexedDB:', err);
       }
@@ -321,25 +372,7 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // 1-Time Device Audio Sync Setup & Auto Background Re-Sync
-    const hasSyncGranted = localStorage.getItem('aurabeat_device_sync_granted') === 'true';
-
-    let promptTimer: NodeJS.Timeout | null = null;
-    if (hasSyncGranted) {
-      // Permission already granted previously! Quietly auto-sync in the background
-      deviceSyncEngine.attemptAutoSilentSync((newSong) => {
-        handleSingleDeviceSongFound(newSong);
-      });
-    } else {
-      // Prompt on open so all device folders scan automatically
-      promptTimer = setTimeout(() => {
-        setIsFirstTimeAudioPrompt(true);
-        setIsDeviceAudioModalOpen(true);
-      }, 350);
-    }
-
     return () => {
-      if (promptTimer) clearTimeout(promptTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -347,16 +380,9 @@ export default function App() {
 
   // Handle live incremental single device song found in background
   const handleSingleDeviceSongFound = (newSong: Song) => {
-    // 1. Add ONLY to the songs list (library list)
+    // 1. Add ONLY to the songs list (library list) with strict deduplication
     setSongs((prev) => {
-      if (
-        prev.some(
-          (s) =>
-            s.id === newSong.id ||
-            (s.title.toLowerCase() === newSong.title.toLowerCase() &&
-              s.artist.toLowerCase() === newSong.artist.toLowerCase())
-        )
-      ) {
+      if (isSongDuplicate(prev, newSong)) {
         return prev;
       }
       return [...prev, newSong];
@@ -364,14 +390,7 @@ export default function App() {
 
     // 2. Append to queue at end so active song index is preserved
     setQueue((prev) => {
-      if (
-        prev.some(
-          (s) =>
-            s.id === newSong.id ||
-            (s.title.toLowerCase() === newSong.title.toLowerCase() &&
-              s.artist.toLowerCase() === newSong.artist.toLowerCase())
-        )
-      ) {
+      if (isSongDuplicate(prev, newSong)) {
         return prev;
       }
       return [...prev, newSong];
@@ -382,14 +401,22 @@ export default function App() {
   // Handle batch of device songs scanned & imported
   const handleDeviceSongsImported = (importedSongs: Song[]) => {
     setSongs((prev) => {
-      const existingIds = new Set(prev.map((s) => s.id));
-      const newUnique = importedSongs.filter((s) => !existingIds.has(s.id));
-      return [...prev, ...newUnique];
+      const uniqueBatch: Song[] = [];
+      for (const s of importedSongs) {
+        if (!isSongDuplicate(prev, s) && !isSongDuplicate(uniqueBatch, s)) {
+          uniqueBatch.push(s);
+        }
+      }
+      return uniqueBatch.length > 0 ? [...prev, ...uniqueBatch] : prev;
     });
     setQueue((prev) => {
-      const existingIds = new Set(prev.map((s) => s.id));
-      const newUnique = importedSongs.filter((s) => !existingIds.has(s.id));
-      return [...prev, ...newUnique];
+      const uniqueBatch: Song[] = [];
+      for (const s of importedSongs) {
+        if (!isSongDuplicate(prev, s) && !isSongDuplicate(uniqueBatch, s)) {
+          uniqueBatch.push(s);
+        }
+      }
+      return uniqueBatch.length > 0 ? [...prev, ...uniqueBatch] : prev;
     });
     // Synced songs do NOT override active playing song in mini player
   };
@@ -889,6 +916,17 @@ export default function App() {
       tempAudio.src = url;
       tempAudio.onloadedmetadata = async () => {
         const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+        const candidate = {
+          title: cleanTitle,
+          artist: 'My Local Music',
+          album: 'Device Offline Tracks',
+        };
+
+        if (isSongDuplicate(songs, candidate)) {
+          console.info(`Song "${cleanTitle}" is already in your library, skipping duplicate.`);
+          return;
+        }
+
         const newSong: Song = {
           id,
           title: cleanTitle,
@@ -907,6 +945,7 @@ export default function App() {
         await saveAudioBlob(id, file);
         await saveSongMetadata(newSong);
 
+        deviceSyncEngine.registerSongSignature(newSong);
         setSongs((prev) => [newSong, ...prev]);
         setQueue((prev) => [newSong, ...prev]);
         confetti({ particleCount: 30, spread: 60, origin: { y: 0.8 } });
@@ -1330,34 +1369,52 @@ export default function App() {
           </div>
         </div>
 
-        {/* Top Status & Shortcut Controls */}
-        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
-          {/* Global Search Button - Small glowing button, expands on click or Ctrl+K */}
+        {/* Top Status & Shortcut Controls (Pea-sized micro icon buttons) */}
+        <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+          {/* Micro Search Button */}
           <button
             type="button"
             onClick={() => setIsGlobalSearchOpen(true)}
-            className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-cyan-500/15 hover:from-emerald-500/25 hover:to-cyan-500/25 border border-cyan-400/40 hover:border-emerald-400/60 text-cyan-300 hover:text-white text-xs font-semibold shadow-[0_0_12px_rgba(6,182,212,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all shrink-0 cursor-pointer group active:scale-95"
-            title="Global Search across songs, artists, playlists (Ctrl + K)"
+            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-zinc-800/90 hover:bg-cyan-500/25 border border-cyan-400/40 text-cyan-300 hover:text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 shadow-[0_0_8px_rgba(6,182,212,0.25)]"
+            title="Search Songs & Artists (Ctrl + K)"
           >
-            <Search className="w-3.5 h-3.5 text-cyan-300 group-hover:text-emerald-300 transition-colors animate-pulse" />
-            <span className="hidden sm:inline text-[11px] font-bold text-zinc-200 group-hover:text-white">
-              Search
-            </span>
-            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/50 text-emerald-300 border border-emerald-500/30 shadow-xs">
-              Ctrl K
-            </kbd>
+            <Search className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </button>
-          {/* Party Mode Room Badge - ONLY shown if in an active room, compact */}
+
+          {/* Micro Upload Button */}
+          <button
+            type="button"
+            onClick={handleOpenAudioGallery}
+            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-zinc-800/90 hover:bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 hover:text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 shadow-[0_0_8px_rgba(16,185,129,0.25)]"
+            title="Upload Music File"
+          >
+            <Upload className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          </button>
+
+          {/* Micro Auto-Sync Device Audio Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsFirstTimeAudioPrompt(false);
+              setIsDeviceAudioModalOpen(true);
+            }}
+            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-zinc-800/90 hover:bg-sky-500/25 border border-sky-400/40 text-sky-300 hover:text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 shadow-[0_0_8px_rgba(56,189,248,0.25)]"
+            title="Auto-Scan Device Music Folders"
+          >
+            <FolderOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          </button>
+
+          {/* Party Mode Room Badge - ONLY shown if in an active room */}
           {syncConnected && (
             <button
               onClick={() => {
                 setSyncModalTab('host');
                 setIsSyncOpen(true);
               }}
-              className="flex items-center space-x-1 px-2 py-1 rounded-xl text-[10px] sm:text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm animate-pulse shrink-0"
+              className="h-6 px-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-mono font-bold flex items-center space-x-0.5 animate-pulse cursor-pointer"
               title={`Room Active: ${syncRoomCode}`}
             >
-              <Radio className="w-3 h-3 text-emerald-400 shrink-0" />
+              <Radio className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
               <span>{syncRoomCode}</span>
             </button>
           )}
@@ -1366,54 +1423,30 @@ export default function App() {
           {sleepTimerSeconds !== null && sleepTimerSeconds > 0 && (
             <button
               onClick={() => setIsSleepOpen(true)}
-              className="flex items-center space-x-1 px-2 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-[11px] font-mono font-bold shrink-0"
+              className="h-6 px-1.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-[9px] font-mono font-bold flex items-center space-x-0.5 cursor-pointer"
+              title="Sleep Timer"
             >
-              <Moon className="w-3 h-3" />
+              <Moon className="w-2.5 h-2.5 shrink-0" />
               <span>{Math.ceil(sleepTimerSeconds / 60)}m</span>
             </button>
           )}
 
-          {/* Theme Selector */}
+          {/* Micro Theme Selector Button */}
           <button
             onClick={() => setIsThemeOpen(true)}
-            className="p-1.5 sm:p-2 rounded-xl bg-zinc-800/80 text-zinc-300 hover:text-white border border-white/5 transition-colors shrink-0"
+            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-zinc-800/90 hover:bg-purple-500/25 border border-purple-400/40 text-purple-300 hover:text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 shadow-[0_0_8px_rgba(168,85,247,0.25)]"
             title="Theme & Colors"
           >
-            <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Palette className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </button>
 
-          {/* 1-Click Auto-Sync Device Audio */}
-          <button
-            onClick={() => {
-              setIsFirstTimeAudioPrompt(false);
-              setIsDeviceAudioModalOpen(true);
-            }}
-            className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold transition-all shadow-sm hover:shadow-emerald-500/20 shrink-0 cursor-pointer active:scale-95"
-            title="Auto-scan and background sync all device music folders"
-          >
-            <FolderOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">Sync Device</span>
-            <span className="sm:hidden">Sync</span>
-          </button>
-
-          {/* Direct Upload Song Button */}
-          <button
-            onClick={() => setIsAdminModalOpen(true)}
-            className="flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 via-cyan-500/20 to-blue-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-400/40 text-emerald-300 hover:text-white text-xs font-bold transition-all shadow-sm hover:shadow-cyan-500/20 shrink-0 cursor-pointer"
-            title="Upload Song (Title, Artist, Album, Cover Image) to Storage"
-          >
-            <Upload className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="hidden xs:inline">Upload Song</span>
-            <span className="xs:hidden">Upload</span>
-          </button>
-
-          {/* Offline Storage Hub */}
+          {/* Micro Offline Storage Hub Button */}
           <button
             onClick={() => setIsUserOpen(true)}
-            className="p-1.5 sm:p-2 rounded-xl bg-zinc-800/80 text-zinc-300 hover:text-white border border-white/5 transition-colors shrink-0 cursor-pointer"
+            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-zinc-800/90 hover:bg-teal-500/25 border border-teal-400/40 text-teal-300 hover:text-white flex items-center justify-center transition-all cursor-pointer active:scale-90 shadow-[0_0_8px_rgba(20,184,166,0.25)]"
             title="Offline Storage & Library Settings"
           >
-            <HardDrive className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+            <HardDrive className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </button>
         </div>
       </header>
@@ -1695,52 +1728,15 @@ export default function App() {
             </button>
           </div>
 
-          {/* Search Bar & Upload Button */}
-          <div className="flex items-center space-x-2">
-            <div className="relative flex-1 md:w-60">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search song, artist, genre..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-zinc-500"
-              />
-            </div>
-
-            {/* Auto-Scan Device Audio Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsFirstTimeAudioPrompt(false);
-                setIsDeviceAudioModalOpen(true);
-              }}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all shadow-sm shrink-0 cursor-pointer active:scale-95"
-              title="Automatic scan all songs from your device storage"
-            >
-              <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Auto-Scan</span>
-              <span>Device Audio</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleOpenAudioGallery}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white text-xs font-bold hover:opacity-95 shadow-md shadow-cyan-500/20 transition-all shrink-0 cursor-pointer active:scale-95"
-              title="Open Device Audio Gallery"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Upload Songs</span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="audio/*,audio/mpeg,audio/mp3,audio/wav,audio/x-m4a,audio/flac,audio/ogg,.mp3,.wav,.ogg,.m4a,.flac,.aac"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </div>
+          {/* Hidden file input for header Upload button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="audio/*,audio/mpeg,audio/mp3,audio/wav,audio/x-m4a,audio/flac,audio/ogg,.mp3,.wav,.ogg,.m4a,.flac,.aac"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
         </div>
 
         {/* Sorting Pills Toolbar (Jis date pe link hua, Song Name, Artist Name, Duration) */}

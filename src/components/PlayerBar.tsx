@@ -10,7 +10,7 @@ import {
   Mic2,
   WifiOff,
 } from 'lucide-react';
-import { SparkProgressBar } from './SparkProgressBar';
+import { SparkProgressBar, getSongColorPalette } from './SparkProgressBar';
 
 interface PlayerBarProps {
   currentSong: Song | null;
@@ -60,8 +60,18 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
 }) => {
   if (!currentSong) return null;
 
+  const palette = getSongColorPalette(currentSong.id, currentSong.title);
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-x-hidden bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 px-2 sm:px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl gpu-accelerated">
+    <div className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-x-hidden bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 px-2 sm:px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl gpu-accelerated relative">
+      {/* Dynamic Ambient Rhythmic Glow Edge (ONLY visible when music plays) */}
+      {isPlaying && (
+        <div
+          className="absolute -top-[1.5px] left-0 right-0 h-[2.5px] opacity-90 blur-[1px] animate-pulse pointer-events-none transition-all duration-500"
+          style={{ background: palette.trackGradient }}
+        />
+      )}
+
       {/* Top Spark Seek Progress Bar */}
       <div className="relative w-full -mt-1 mb-1.5">
         <SparkProgressBar
@@ -71,6 +81,8 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
           isPlaying={isPlaying}
           size="sm"
           accentColor={accentColor}
+          songId={currentSong.id}
+          songTitle={currentSong.title}
         />
       </div>
 
@@ -78,7 +90,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
         {/* Left: Song Info (Cover + Title + Artist + Time) */}
         <div
           onClick={onOpenFullPlayer}
-          className="flex items-center space-x-2.5 min-w-0 max-w-[42%] sm:max-w-xs shrink cursor-pointer group"
+          className="flex items-center space-x-2.5 min-w-0 max-w-[44%] sm:max-w-xs shrink cursor-pointer group"
           title="Open Fullscreen Player"
         >
           <div className="relative shrink-0">
@@ -88,13 +100,65 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).src = '/logo.png';
               }}
-              className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover shadow-md transition-transform group-hover:scale-105 ${
-                isPlaying ? 'ring-2 ring-cyan-400/50' : ''
+              className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover shadow-md transition-all duration-500 ${
+                isPlaying ? 'scale-105' : ''
               }`}
+              style={
+                isPlaying
+                  ? {
+                      boxShadow: palette.dotShadow,
+                      border: `2px solid ${palette.dotBorder}`,
+                    }
+                  : undefined
+              }
             />
+
+            {/* Dynamic Dancing Soundwave Bars Overlay on Thumbnail (ONLY when playing) */}
+            {isPlaying && (
+              <div className="absolute inset-0 rounded-xl bg-black/40 backdrop-blur-[0.5px] flex items-center justify-center pointer-events-none">
+                <div className="flex items-end justify-center space-x-0.5 h-4">
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '70%',
+                      backgroundColor: palette.sparkColors[0] || '#38bdf8',
+                      animationDuration: '0.5s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '100%',
+                      backgroundColor: palette.sparkColors[1] || '#34d399',
+                      animationDuration: '0.4s',
+                      animationDelay: '0.12s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '55%',
+                      backgroundColor: palette.sparkColors[2] || '#f472b6',
+                      animationDuration: '0.65s',
+                      animationDelay: '0.25s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '85%',
+                      backgroundColor: palette.sparkColors[0] || '#38bdf8',
+                      animationDuration: '0.45s',
+                      animationDelay: '0.08s',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
             {currentSong.isOffline && (
               <span
-                className="absolute -top-1 -right-1 p-0.5 bg-emerald-500 rounded-full text-black shadow-md"
+                className="absolute -top-1 -right-1 p-0.5 bg-emerald-500 rounded-full text-black shadow-md z-10"
                 title="Saved Offline"
               >
                 <WifiOff className="w-2.5 h-2.5" />
@@ -103,9 +167,24 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
           </div>
 
           <div className="truncate min-w-0">
-            <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
-              {currentSong.title}
-            </h4>
+            <div className="flex items-center space-x-1.5 truncate">
+              <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                {currentSong.title}
+              </h4>
+              {/* Dynamic Animated Pulse Pill (ONLY when playing) */}
+              {isPlaying && (
+                <span
+                  className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-extrabold animate-pulse shrink-0 border border-white/20"
+                  style={{
+                    backgroundColor: `${palette.dotCore}30`,
+                    color: palette.dotBorder,
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: palette.sparkColors[0] }} />
+                  <span className="hidden sm:inline">LIVE</span>
+                </span>
+              )}
+            </div>
             <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
               {currentSong.artist}
             </p>

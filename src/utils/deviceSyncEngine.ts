@@ -80,6 +80,87 @@ export function parseAudioFilename(filename: string): { title: string; artist: s
   };
 }
 
+export function normalizeSongIdentity(str?: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, '') // strip file extension
+    .replace(/\s*[\(\[\{].*?[\)\]\}]\s*/g, ' ') // remove (remix), [official], etc.
+    .replace(/^[0-9\s._-]+/, '') // strip leading track numbers like "01 - ", "1. ", "02_"
+    .replace(/[^a-z0-9]/gi, '') // remove spaces, dashes, symbols
+    .trim();
+}
+
+export function normalizeTitleArtistKey(title?: string, artist?: string): string {
+  return `${normalizeSongIdentity(title)}__${normalizeSongIdentity(artist)}`;
+}
+
+export function normalizeFullSongKey(title?: string, artist?: string, album?: string): string {
+  return `${normalizeSongIdentity(title)}__${normalizeSongIdentity(artist)}__${normalizeSongIdentity(album)}`;
+}
+
+/**
+ * Universal strict song deduplication check:
+ * Returns true if candidate matches any existing song by:
+ * 1. Matching ID
+ * 2. Exact Title + Artist + Album
+ * 3. Exact Title + Artist
+ * 4. Exact Title (when artist is generic/empty, or matches existing song)
+ */
+export function isSongDuplicate(
+  existingSongs: Song[],
+  candidate: { id?: string; title?: string; artist?: string; album?: string }
+): boolean {
+  if (!candidate || !existingSongs || existingSongs.length === 0) return false;
+
+  const candId = (candidate.id || '').trim().toLowerCase();
+  const candFullKey = normalizeFullSongKey(candidate.title, candidate.artist, candidate.album);
+  const candTitleArtistKey = normalizeTitleArtistKey(candidate.title, candidate.artist);
+  const candTitle = normalizeSongIdentity(candidate.title);
+  const candExactTitle = (candidate.title || '').trim().toLowerCase();
+  const candArtist = normalizeSongIdentity(candidate.artist);
+  const isCandArtistGeneric =
+    !candArtist ||
+    candArtist.includes('device') ||
+    candArtist.includes('unknown') ||
+    candArtist.includes('storage') ||
+    candArtist === 'audiotrack';
+
+  return existingSongs.some((s) => {
+    // 1. Direct ID match
+    if (candId && s.id && s.id.toLowerCase() === candId) return true;
+
+    // 2. Title + Artist + Album match
+    const sFullKey = normalizeFullSongKey(s.title, s.artist, s.album);
+    if (candFullKey && sFullKey && candFullKey === sFullKey) return true;
+
+    // 3. Title + Artist match
+    const sTitleArtistKey = normalizeTitleArtistKey(s.title, s.artist);
+    if (candTitleArtistKey && sTitleArtistKey && candTitleArtistKey === sTitleArtistKey) return true;
+
+    // 4. Title match
+    const sTitle = normalizeSongIdentity(s.title);
+    if (candTitle && sTitle && candTitle === sTitle) {
+      const sArtist = normalizeSongIdentity(s.artist);
+      const isSArtistGeneric =
+        !sArtist ||
+        sArtist.includes('device') ||
+        sArtist.includes('unknown') ||
+        sArtist.includes('storage') ||
+        sArtist === 'audiotrack';
+
+      // If either artist is generic, or artists match, or exact raw title matches
+      if (isCandArtistGeneric || isSArtistGeneric || candArtist === sArtist) {
+        return true;
+      }
+      if (candExactTitle && (s.title || '').trim().toLowerCase() === candExactTitle) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}
+
 // Quick duration probe with fast timeout
 export function probeAudioDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
@@ -156,23 +237,62 @@ class DeviceSyncEngine {
   }
 
   /**
+   * Registers a song's signatures to ensure it is never duplicated
+   */
+  public registerSongSignature(s: { title?: string; artist?: string; album?: string; id?: string }) {
+    if (!s) return;
+    if (s.id) this.knownSignatures.add(s.id.toLowerCase());
+    const fullKey = normalizeFullSongKey(s.title, s.artist, s.album);
+    const titleArtistKey = normalizeTitleArtistKey(s.title, s.artist);
+    const titleOnly = normalizeSongIdentity(s.title);
+
+    if (fullKey) this.knownSignatures.add(fullKey);
+    if (titleArtistKey) this.knownSignatures.add(titleArtistKey);
+    if (titleOnly) this.knownSignatures.add(titleOnly);
+  }
+
+  /**
+   * Checks if a song is already present in the app by matching Title + Artist + Album
+   */
+  public isDuplicateSong(title: string, artist: string, album: string): boolean {
+    const fullKey = normalizeFullSongKey(title, artist, album);
+    const titleArtistKey = normalizeTitleArtistKey(title, artist);
+    const titleOnly = normalizeSongIdentity(title);
+
+    // 1. Exact match on title + artist + album
+    if (fullKey && this.knownSignatures.has(fullKey)) return true;
+
+    // 2. Exact match on title + artist
+    if (titleArtistKey && this.knownSignatures.has(titleArtistKey)) return true;
+
+    // 3. Exact match on song title (strict single-song enforcement per user prompt)
+    if (titleOnly && this.knownSignatures.has(titleOnly)) return true;
+
+    return false;
+  }
+
+  /**
    * Initializes known song cache to prevent duplicate imports
    */
-  public async initKnownSongs() {
-    if (this.isInitialized) return;
+  public async initKnownSongs(currentSongs?: Song[]) {
     try {
       const existing = await getAllSavedSongs();
-      existing.forEach((s) => {
-        if (s.title) {
-          this.knownSignatures.add(`${s.title.toLowerCase()}_${s.artist.toLowerCase()}`);
-        }
-        if (s.id) {
-          this.knownSignatures.add(s.id);
-        }
-      });
+      existing.forEach((s) => this.registerSongSignature(s));
+      if (currentSongs && Array.isArray(currentSongs)) {
+        currentSongs.forEach((s) => this.registerSongSignature(s));
+      }
       this.isInitialized = true;
     } catch {
       this.isInitialized = true;
+    }
+  }
+
+  /**
+   * Keep known song signatures in sync with active App state
+   */
+  public updateKnownAppSongs(songs: Song[]) {
+    if (Array.isArray(songs)) {
+      songs.forEach((s) => this.registerSongSignature(s));
     }
   }
 
@@ -192,11 +312,10 @@ class DeviceSyncEngine {
     if (!isAudio) return null;
 
     const { title, artist, album } = parseAudioFilename(file.name);
-    const signature = `${title.toLowerCase()}_${artist.toLowerCase()}_${file.size}`;
-    const nameSignature = `${title.toLowerCase()}_${artist.toLowerCase()}`;
+    const effectiveAlbum = folderName && folderName !== '.' ? folderName : album;
 
-    // Skip if already imported
-    if (this.knownSignatures.has(signature) || this.knownSignatures.has(nameSignature)) {
+    // STRICT DEDUPLICATION: If exact title, artist or album already exists, SKIP!
+    if (this.isDuplicateSong(title, artist, effectiveAlbum)) {
       return null;
     }
 
@@ -216,7 +335,7 @@ class DeviceSyncEngine {
       id: songId,
       title,
       artist,
-      album: folderName && folderName !== '.' ? folderName : album,
+      album: effectiveAlbum,
       duration,
       url: URL.createObjectURL(file),
       coverArt,
@@ -234,9 +353,7 @@ class DeviceSyncEngine {
       console.warn('Could not persist audio blob to IndexedDB:', e);
     }
 
-    this.knownSignatures.add(signature);
-    this.knownSignatures.add(nameSignature);
-    this.knownSignatures.add(songId);
+    this.registerSongSignature(newSong);
 
     const newCount = this.progress.foundSongsCount + 1;
     this.notify({ foundSongsCount: newCount });

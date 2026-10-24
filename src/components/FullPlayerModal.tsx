@@ -29,7 +29,7 @@ import {
   Image as ImageIcon,
   Mic2,
 } from 'lucide-react';
-import { SparkProgressBar } from './SparkProgressBar';
+import { SparkProgressBar, getSongColorPalette } from './SparkProgressBar';
 
 interface FullPlayerModalProps {
   isOpen: boolean;
@@ -111,6 +111,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   if (!isOpen || !currentSong) return null;
 
   const boostPercent = Math.round(eqSettings.volumeBoost * 100);
+  const palette = getSongColorPalette(currentSong.id, currentSong.title);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-white overflow-hidden animate-in slide-in-from-bottom duration-300">
@@ -238,12 +239,92 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 md:p-8 max-w-4xl mx-auto w-full overflow-hidden">
         {activeTab === 'art' && (
           <div className="flex flex-col items-center justify-center w-full max-w-md space-y-6">
-            {/* Spinning Vinyl & Glowing Artwork */}
-            <div className="relative group">
+            {/* Spinning Vinyl & Glowing Artwork with Dynamic Live Effects (ONLY visible when playing) */}
+            <div className="relative group flex items-center justify-center">
+              {/* Dynamic Harmonic Glowing Aura Ring (ONLY when playing) */}
+              {isPlaying && (
+                <>
+                  <div
+                    className="absolute -inset-4 rounded-[36px] blur-2xl opacity-60 animate-pulse pointer-events-none transition-all duration-700"
+                    style={{ background: palette.trackGradient }}
+                  />
+                  <div
+                    className="absolute -inset-8 rounded-[44px] blur-3xl opacity-35 animate-spin-slow pointer-events-none"
+                    style={{ background: palette.mistGradient }}
+                  />
+                </>
+              )}
+
+              {/* Dynamic Realistic Rotating Vinyl Record sliding out from behind jacket (ONLY when playing) */}
+              {isPlaying && (
+                <div
+                  className="absolute -right-8 md:-right-12 top-4 md:top-6 w-56 h-56 md:w-68 md:h-68 rounded-full border-4 border-zinc-900 shadow-2xl flex items-center justify-center animate-spin-slow pointer-events-none -z-10 transition-all duration-700"
+                  style={{
+                    background: 'radial-gradient(circle, #27272a 20%, #09090b 45%, #18181b 70%, #000 100%)',
+                    boxShadow: '0 0 25px rgba(0,0,0,0.8), 0 0 14px rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div className="absolute inset-4 rounded-full border border-white/5" />
+                  <div className="absolute inset-8 rounded-full border border-white/5" />
+                  <div className="absolute inset-12 rounded-full border border-white/5" />
+                  <div className="w-20 h-20 rounded-full border-2 border-white/20 overflow-hidden relative shadow-inner">
+                    <img src={currentSong.coverArt || '/logo.png'} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <div className="w-3.5 h-3.5 rounded-full bg-zinc-900 border border-white/40" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Floating Musical Notes & Star Sparks (ONLY when playing) */}
+              {isPlaying && (
+                <div className="absolute inset-0 pointer-events-none overflow-visible">
+                  <span
+                    className="absolute -top-7 left-4 text-base animate-spark-float-1 select-none font-bold"
+                    style={{ color: palette.sparkColors[0] || '#38bdf8' }}
+                  >
+                    ♪
+                  </span>
+                  <span
+                    className="absolute -top-5 right-6 text-lg animate-spark-float-2 select-none font-bold"
+                    style={{ color: palette.sparkColors[1] || '#34d399' }}
+                  >
+                    ♫
+                  </span>
+                  <span
+                    className="absolute top-1/2 -left-7 text-xl animate-spark-float-3 select-none font-bold"
+                    style={{ color: palette.sparkColors[2] || palette.sparkColors[0] || '#f472b6' }}
+                  >
+                    ✦
+                  </span>
+                  <span
+                    className="absolute top-1/3 -right-6 text-sm animate-spark-float-4 select-none font-bold"
+                    style={{ color: palette.sparkColors[0] || '#38bdf8' }}
+                  >
+                    ♬
+                  </span>
+                  <span
+                    className="absolute -bottom-6 left-1/4 text-xs animate-spark-float-2 select-none font-bold"
+                    style={{ color: palette.sparkColors[1] || '#34d399' }}
+                  >
+                    ⋆
+                  </span>
+                </div>
+              )}
+
+              {/* Main Album Artwork Card */}
               <div
-                className={`w-64 h-64 md:w-80 md:h-80 rounded-3xl overflow-hidden shadow-2xl border-2 border-white/10 transition-all duration-700 ${
-                  isPlaying ? 'shadow-cyan-500/20 scale-102 ring-4 ring-cyan-500/30' : ''
+                className={`w-64 h-64 md:w-80 md:h-80 rounded-3xl overflow-hidden shadow-2xl border-2 border-white/10 transition-all duration-700 relative z-10 ${
+                  isPlaying ? 'scale-102 ring-4 ring-white/20' : ''
                 }`}
+                style={
+                  isPlaying
+                    ? {
+                        boxShadow: palette.dotShadow,
+                        borderColor: palette.dotBorder,
+                      }
+                    : undefined
+                }
               >
                 <img
                   src={currentSong.coverArt || '/logo.png'}
@@ -260,7 +341,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onEditSong(currentSong)}
-                  className="absolute -bottom-3 left-4 px-3 py-1 rounded-full bg-cyan-500/20 hover:bg-cyan-500 hover:text-black border border-cyan-500/40 text-[10px] font-bold text-cyan-300 flex items-center space-x-1 shadow-lg transition-all cursor-pointer"
+                  className="absolute -bottom-3 left-4 px-3 py-1 rounded-full bg-cyan-500/20 hover:bg-cyan-500 hover:text-black border border-cyan-500/40 text-[10px] font-bold text-cyan-300 flex items-center space-x-1 shadow-lg transition-all cursor-pointer z-20"
                   title="Change Cover Art & Publish Online (कवर बदलें और ऑनलाइन पब्लिश करें)"
                 >
                   <ImageIcon className="w-3 h-3" />
@@ -269,14 +350,64 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
               )}
 
               {/* Vinyl Groove Badge */}
-              <div className="absolute -bottom-3 right-4 px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-mono text-cyan-400 flex items-center space-x-1 shadow-lg">
+              <div className="absolute -bottom-3 right-4 px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-mono text-cyan-400 flex items-center space-x-1 shadow-lg z-20">
                 <Music className="w-3 h-3" />
                 <span>Hi-Fi 300% Engine</span>
               </div>
             </div>
 
-            {/* Title & Artist */}
+            {/* Title & Artist with Live Equalizer Indicator */}
             <div className="text-center w-full">
+              {/* Dynamic Live Dancing Soundwave Bars (ONLY when playing) */}
+              {isPlaying && (
+                <div className="flex items-center justify-center space-x-1 mb-2">
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '14px',
+                      backgroundColor: palette.sparkColors[0] || '#38bdf8',
+                      animationDuration: '0.45s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '24px',
+                      backgroundColor: palette.sparkColors[1] || '#34d399',
+                      animationDuration: '0.55s',
+                      animationDelay: '0.1s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '16px',
+                      backgroundColor: palette.sparkColors[2] || '#f472b6',
+                      animationDuration: '0.4s',
+                      animationDelay: '0.2s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '26px',
+                      backgroundColor: palette.sparkColors[0] || '#eab308',
+                      animationDuration: '0.6s',
+                      animationDelay: '0.05s',
+                    }}
+                  />
+                  <span
+                    className="w-1 rounded-full animate-bounce"
+                    style={{
+                      height: '18px',
+                      backgroundColor: palette.sparkColors[1] || '#818cf8',
+                      animationDuration: '0.5s',
+                      animationDelay: '0.15s',
+                    }}
+                  />
+                </div>
+              )}
+
               <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white truncate">
                 {currentSong.title}
               </h2>
@@ -423,6 +554,8 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
             isPlaying={isPlaying}
             size="md"
             accentColor={accentColor}
+            songId={currentSong.id}
+            songTitle={currentSong.title}
           />
           <div className="flex justify-between text-xs font-mono text-zinc-400 -mt-1">
             <span>{formatTime(currentTime)}</span>
